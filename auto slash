@@ -1,8 +1,6 @@
 --// i fixed it - luna <3 //
 --// FLEX SAKEN v1.1 - By Ethan and Luna //
---// Elliot, Veeronica, Auto Generator, Animations, Music, Chance, Nova, Dusekkar, Candy ESP, Jane Doe, Backstab, G1337 Auto Block //
 
---// Wait for game to reach minimum distributed time, with a generous cap //
 local _waitStart = os.clock()
 while workspace.DistributedGameTime < 4 and os.clock() - _waitStart < 15 do
     task.wait(0.5)
@@ -10,11 +8,9 @@ end
 
 local CoreGui = game:GetService("CoreGui")
 
---// Clean up any leftover instance from a previous run //
 local existing = CoreGui:FindFirstChild("FlexSaken")
 if existing then
     existing:Destroy()
-    --// Remove leftover GUIs from the previous run //
     local PlayerGui = game:GetService("Players").LocalPlayer:FindFirstChildOfClass("PlayerGui")
     if PlayerGui then
         for _, v in ipairs(PlayerGui:GetChildren()) do
@@ -23,7 +19,6 @@ if existing then
             end
         end
     end
-    --// Remove leftover WindUI window if present //
     for _, v in ipairs(CoreGui:GetChildren()) do
         if v.Name == "WindUI" or v.Name == "FlexSaken_UI" then
             v:Destroy()
@@ -32,8 +27,6 @@ if existing then
     task.wait(0.2)
 end
 
---// Wait up to 3 s for the correct game ID or ServerType attribute to appear //
---// (handles cases where the game hasn't fully replicated yet at inject time) //
 do
     local _gidStart = os.clock()
     while not (game.GameId == 6331902150 or game.GameId == 7464167604 or workspace:GetAttribute("ServerType")) do
@@ -46,8 +39,6 @@ do
 end
 
 pcall(function() Instance.new("BoolValue", CoreGui).Name = "FlexSaken" end)
-
---// SERVICES //
 
 local Players          = game:GetService("Players")
 local ReplicatedStorage= game:GetService("ReplicatedStorage")
@@ -63,22 +54,7 @@ local Workspace        = workspace
 
 local LocalPlayer = Players.LocalPlayer
 
---// EXECUTOR COMPATIBILITY SHIM //
---// Supported PC      : Opiumware, Volcano, Real, Potassium, Volt, Wave (macOS) //
---// Supported Mobile  : Delta (Android/iOS), Codex (Android) //
---//
---// API surface per executor (UNC = standard names, alt = alternate name exposed) //
---//  Opiumware  : UNC + hookfunction + debug.getupvalues/setupvalue/info + getconnections //
---//  Volcano    : UNC + hookfunction + debug.* + getconnections + getcustomasset //
---//  Real       : UNC + hookfunction + debug.* + getconnections //
---//  Potassium  : UNC + hookfunction + debug.* + getconnections + getcustomasset //
---//  Volt       : UNC + hookfunction + debug.* + getconnections //
---//  Wave (mac) : UNC + hookfunction + debug.* + getconnections; http via request() //
---//  Delta      : UNC + replaceclosure + debug.* + getconnections; toclipboard alias //
---//  Codex      : UNC + hookfunction + debug.* + getconnections //
-
 do
-    --// ── Detect executor ── //
     local execName = ""
     for _, fn in ipairs({ getexecutorname, identifyexecutor }) do
         if typeof(fn) == "function" then
@@ -95,17 +71,10 @@ do
     local isVolcano  = execName:find("volcano")  ~= nil
     local isOpium    = execName:find("opium")    ~= nil
 
-    --// ── gethui ── //
-    --// All executors: CoreGui fallback if gethui missing //
     if typeof(gethui) ~= "function" then
         gethui = function() return game:GetService("CoreGui") end
     end
 
-    --// ── File I/O ── //
-    --// Standard: readfile, writefile, isfile, isfolder, makefolder, appendfile, deletefile //
-    --// Alternate names some executors use:                                                 //
-    --//   read_file, write_file, io_read, io_write, folder_exists, file_exists, mkdir       //
-    --//   Wave (macOS): same standard UNC names, no special shim needed                    //
     if typeof(readfile) ~= "function" then
         readfile   = typeof(read_file)   == "function" and read_file   or
                      typeof(io_read)     == "function" and io_read     or
@@ -148,16 +117,10 @@ do
                      function() return {} end
     end
 
-    --// ── getcustomasset ── //
-    --// Volcano, Potassium: native. Others: safe no-op. //
     if typeof(getcustomasset) ~= "function" then
         getcustomasset = function() return "" end
     end
 
-    --// ── Clipboard ── //
-    --// All PC executors + Codex: setclipboard                 //
-    --// Delta: setclipboard OR toclipboard (alias both ways)   //
-    --// Wave (macOS): setclipboard ✓                           //
     if typeof(setclipboard) ~= "function" then
         setclipboard = typeof(toclipboard)   == "function" and toclipboard   or
                        typeof(set_clipboard) == "function" and set_clipboard or
@@ -168,10 +131,6 @@ do
         toclipboard = setclipboard
     end
 
-    --// ── HTTP ── //
-    --// All executors support game:HttpGet natively.                       //
-    --// Wave (macOS): also exposes request() as the low-level function.    //
-    --// Fallback chain: syn.request → http.request → request → no-op.     //
     if typeof(game.HttpGet) ~= "function" then
         pcall(function()
             if typeof(syn)  == "table" and typeof(syn.request)  == "function" then
@@ -183,7 +142,6 @@ do
             end
         end)
     end
-    --// Expose a unified http_request shim for scripts that call it directly //
     if typeof(http_request) ~= "function" then
         http_request = typeof(request)      == "function" and request      or
                        (typeof(syn) == "table" and typeof(syn.request) == "function" and syn.request) or
@@ -194,9 +152,6 @@ do
         request = http_request
     end
 
-    --// ── hookfunction / replaceclosure ── //
-    --// Opiumware, Volcano, Real, Potassium, Volt, Wave, Codex: hookfunction  //
-    --// Delta: replaceclosure (also hookfunction on newer builds)             //
     if typeof(hookfunction) ~= "function" then
         hookfunction = typeof(replaceclosure)  == "function" and replaceclosure  or
                        typeof(detour_function) == "function" and detour_function or
@@ -209,16 +164,10 @@ do
         newcclosure = function(f) return f end
     end
 
-    --// ── getconnections ── //
-    --// All 8 executors expose getconnections. Safe no-op if somehow absent. //
     if typeof(getconnections) ~= "function" then
         getconnections = function() return {} end
     end
 
-    --// ── setreadonly ── //
-    --// All PC executors + Codex: setreadonly ✓                             //
-    --// Delta: setreadonly or make_writeable depending on build             //
-    --// Wave (macOS): setreadonly ✓                                         //
     if typeof(setreadonly) ~= "function" then
         setreadonly = typeof(make_writeable) == "function" and function(t, ro)
             if not ro then pcall(make_writeable, t) end
@@ -228,10 +177,6 @@ do
         isreadonly = function() return false end
     end
 
-    --// ── debug upvalue API ── //
-    --// All 8 executors are UNC-compliant here.                             //
-    --// Wave (macOS): debug.getupvalues / debug.setupvalue ✓               //
-    --// Delta: same (also exposes top-level getupvalues/setupvalue aliases) //
     if type(debug) ~= "table" then debug = {} end
     if typeof(debug.getupvalues) ~= "function" then
         debug.getupvalues = typeof(getupvalues) == "function" and getupvalues or function() return {} end
@@ -252,7 +197,6 @@ do
         debug.getproto = typeof(getproto) == "function" and getproto or function() return nil end
     end
 
-    --// ── getgenv / getsenv / getrenv ── //
     if typeof(getgenv) ~= "function" then
         getgenv = function() return getfenv and getfenv(0) or {} end
     end
@@ -263,8 +207,6 @@ do
         getrenv = function() return {} end
     end
 
-    --// ── firetouchinterest / fireclickdetector ── //
-    --// Used by some movement/ESP features. All executors expose these; safe shim if not. //
     if typeof(firetouchinterest) ~= "function" then
         firetouchinterest = function() end
     end
@@ -272,8 +214,6 @@ do
         fireclickdetector = function() end
     end
 
-    --// ── mouse1click / mouse1press / mouse1release ── //
-    --// All executors. Delta exposes mouse_click on some builds. //
     if typeof(mouse1click) ~= "function" then
         mouse1click   = typeof(mouse_click)   == "function" and mouse_click   or function() end
     end
@@ -284,7 +224,6 @@ do
         mouse1release = typeof(mouse_release) == "function" and mouse_release or function() end
     end
 
-    --// ── keystroke shims ── //
     if typeof(keypress) ~= "function" then
         keypress   = function() end
     end
@@ -292,11 +231,8 @@ do
         keyrelease = function() end
     end
 
-    --// ── VirtualUser anti-idle ── //
     pcall(function() game:GetService("VirtualUser") end)
 
-    --// ── Wave macOS: extra safety for missing Roblox-internal services ── //
-    --// Wave runs on macOS Roblox which may have different CoreGui structure //
     if isWave then
         pcall(function()
             local cg = game:GetService("CoreGui")
@@ -305,7 +241,6 @@ do
     end
 end
 
---// flashError: visible GUI so load failures are never silent //
 local function flashError(Message)
     local Ok, Err = pcall(function()
         local Parent
@@ -388,14 +323,12 @@ local ModulesFolder   = ReplicatedStorage:FindFirstChild("Modules")
 local NetworkModule   = ModulesFolder and ModulesFolder:FindFirstChild("Network", true)
 local NetworkFolder   = NetworkModule and (NetworkModule:FindFirstChild("Network") or NetworkModule)
 local Remote          = NetworkFolder and NetworkFolder:FindFirstChildOfClass("RemoteEvent")
---// MapHolder and InGame: FindFirstChild only — never block script init for round folders //
 local MapHolder       = workspace:FindFirstChild("Map")
 local InGame          = MapHolder and MapHolder:FindFirstChild("Ingame")
 
 local LocalCharacter, LocalHumanoid, LocalRoot, SpeedMultipliers
 local CharacterCallbacks = {}
 
---// Lazy-resolve folders that may not exist at inject time (lobby) //
 local function RefreshFolders()
     if not PlayersFolder then
         PlayersFolder = workspace:FindFirstChild("Players")
@@ -426,12 +359,11 @@ local function OnCharacter(Character)
 end
 LocalPlayer.CharacterAdded:Connect(OnCharacter)
 
---// Also refresh folders every few seconds in background for late-joining lobby //
 task.spawn(function()
     for _ = 1, 10 do task.wait(3); RefreshFolders() end
 end)
 
---// SETTINGS / SAVE (FluxSaken system) //
+-- settings
 
 local State = {}
 local Saved = {}
@@ -459,77 +391,39 @@ local function SaveSettings()
     end)
 end
 
---// LOAD UI //
+-- ui load
 
 local WindUI
-local _cacheFile    = "FlexSaken_WindUI.lua"
-local _cacheVersion = "v1.1-r3"           -- bump this to invalidate the disk cache
-local _cacheVerFile = "FlexSaken_WindUI_ver.txt"
+local _cacheFile = "FlexSaken_WindUI.lua"
 local _uiUrls = {
     "https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua",
     "https://raw.githubusercontent.com/Footagesus/WindUI/refs/heads/main/dist/main.lua",
     "https://github.com/Footagesus/WindUI/releases/latest/download/main.lua",
 }
 
---// Wipe disk cache when the version token changes (or on first run) //
-pcall(function()
-    if isfile and writefile and readfile then
-        local storedVer = isfile(_cacheVerFile) and readfile(_cacheVerFile) or ""
-        if storedVer ~= _cacheVersion then
-            pcall(function() if isfile(_cacheFile) then delfile(_cacheFile) end end)
-            pcall(function() writefile(_cacheVerFile, _cacheVersion) end)
-        end
-    end
-end)
-
-local function _WindUIValid(lib)
-    -- a real WindUI must have CreateWindow and that must return something with :Tab()
-    if type(lib) ~= "table" then return false end
-    if type(lib.CreateWindow) ~= "function" then return false end
-    local ok, win = pcall(lib.CreateWindow, lib, { Title = "_probe", Size = UDim2.fromOffset(1,1) })
-    if not ok or type(win) ~= "table" then return false end
-    if type(win.Tab) ~= "function" then return false end
-    -- clean up probe window
-    pcall(function()
-        if win.Destroy then win:Destroy()
-        elseif win.destroy then win:destroy() end
-    end)
-    return true
-end
-
---// Try loading from disk cache — validate before trusting //
-pcall(function()
+local _cached = pcall(function()
     if isfile and isfile(_cacheFile) then
         local src = readfile(_cacheFile)
         if src and #src > 500 then
-            local ok, lib = pcall(loadstring(src))
-            if ok and _WindUIValid(lib) then
-                WindUI = lib
-            else
-                -- cache is bad — delete it so we fetch fresh below
-                pcall(function() if delfile then delfile(_cacheFile) end end)
-            end
+            local lib = loadstring(src)()
+            if lib then WindUI = lib end
         end
     end
 end)
 
---// Fetch fresh from network if cache missed or was invalid //
 if not WindUI then
     for _, url in ipairs(_uiUrls) do
         local ok, result = pcall(function()
             local src = game:HttpGet(url, true)
             if not src or #src < 500 then error("empty response") end
-            local lib = loadstring(src)()
-            if not _WindUIValid(lib) then error("WindUI probe failed") end
             pcall(function() if writefile then writefile(_cacheFile, src) end end)
-            return lib
+            return loadstring(src)()
         end)
         if ok and result then WindUI = result; break end
         task.wait(1)
     end
 end
 
---// Retry up to 3 more times before giving up //
 if not WindUI then
     for _retry = 1, 3 do
         warn("[FlexSaken] WindUI load attempt " .. _retry .. " of 3 — retrying in 3s...")
@@ -538,10 +432,8 @@ if not WindUI then
             local ok, result = pcall(function()
                 local src = game:HttpGet(url, true)
                 if not src or #src < 500 then error("empty response") end
-                local lib = loadstring(src)()
-                if not _WindUIValid(lib) then error("WindUI probe failed") end
                 pcall(function() if writefile then writefile(_cacheFile, src) end end)
-                return lib
+                return loadstring(src)()
             end)
             if ok and result then WindUI = result; break end
         end
@@ -551,7 +443,6 @@ end
 
 local UsingStub = false
 
---// Stub UI: accepts every call and does nothing, so features keep running when WindUI fails //
 local function MakeStub()
     return setmetatable({}, {
         __index = function(_, Key)
@@ -579,8 +470,6 @@ end
 local LogoId     = "rbxassetid://121959674354252"
 local DiscordLink= "https://discord.gg/rA3Vm8u9U"
 
---// CRIMSON THEME //
-
 local ThemeAdded = pcall(function()
     WindUI:AddTheme({
         Name        = "Crimson",
@@ -602,10 +491,10 @@ local WindowOptions = ({
     Icon        = LogoId,
     Author      = "By Ethan and Luna",
     Folder      = "FlexSaken",
-    Size        = TouchOnly and UDim2.fromOffset(560, 420) or UDim2.fromOffset(600, 460),
+    Size        = TouchOnly and UDim2.fromOffset(500, 340) or UDim2.fromOffset(600, 460),
     Transparent = true,
     Theme       = ThemeAdded and "Crimson" or "Dark",
-    SideBarWidth= TouchOnly and 160 or 190,
+    SideBarWidth= 190,
     HasOutline  = true,
 })
 
@@ -625,8 +514,6 @@ end
 pcall(function() WindUI:SetTheme("Crimson") end)
 pcall(function() Window:Tag({ Title = "V" .. Version, Color = Color3.fromRGB(220, 20, 60) }) end)
 
---// OPEN BUTTON with crimson sparkle gradient //
-
 pcall(function()
     Window:EditOpenButton({
         Title         = "Flex Saken",
@@ -644,8 +531,6 @@ end)
 
 pcall(function() Window:SetToggleKey(Enum.KeyCode.RightShift) end)
 
---// HELPERS //
-
 local function Notify(Title, Content, Duration)
     pcall(function()
         WindUI:Notify({ Title = Title, Content = Content, Duration = Duration or 4, Icon = "bell" })
@@ -660,7 +545,6 @@ end
 
 local Registry = {}
 
---// SafeCall / Risky: every feature runs inside its own pcall (no outer wrapper) //
 local function SafeCall(Name, Callback, ...)
     local Ok, Err = pcall(Callback, ...)
     if not Ok then warn("[FlexSaken] " .. tostring(Name) .. " failed: " .. tostring(Err)) end
@@ -676,7 +560,6 @@ end
 local function AddSection(Tab, Title) pcall(function() Tab:Section({ Title = Title }) end) end
 
 local function AddToggle(Tab, Key, Title, Default, Callback)
-    --// Restore saved value or use default //
     local Value = Saved[Key]
     if type(Value) ~= "boolean" then Value = Default end
     State[Key] = Value
@@ -691,7 +574,6 @@ local function AddToggle(Tab, Key, Title, Default, Callback)
     end)
     if not Ok then warn("Toggle " .. Title .. ": " .. tostring(Err)) end
     Registry[Key] = { Kind = "toggle", Default = Default, Callback = Callback, Element = Element }
-    --// Fire callback immediately so saved-on features activate on load //
     if Callback and Value then task.defer(SafeCall, Key, Callback, Value) end
     return Element
 end
@@ -774,7 +656,6 @@ local function GetClosestKiller(Distance)
     return Best, BestDistance
 end
 
---// Shared RemoteFunction silent-aim dispatcher (RemoteFunction.OnClientInvoke hook) //
 local rfDispatch = {
     Hooks = {},
     Order = {},
@@ -857,7 +738,6 @@ local function GetSharedRF(Timeout)
     return nil
 end
 
---// Silent aim factory (Nova, Dusekkar) built on rfDispatch //
 local SA = {}
 
 function SA.Ping()
@@ -884,7 +764,6 @@ function SA.Create(Id, DefaultTeam, GateName)
         Motion = setmetatable({}, { __mode = "k" }),
     }
 
-    --// smoothed velocity: measured from position deltas, falls back to AssemblyLinearVelocity //
     function Aim:Velocity(Root)
         local Now = os.clock()
         local Position = Root.Position
@@ -992,8 +871,10 @@ function SA.AddUI(Tab, Aim, Key, Label)
     end)
 end
 
---// FLUX AUTO BLOCK (QueryHitbox / sound / animation based) //
+-- auto block
 
+local VisualCheckBeam, HitboxFolder, SetAutoBlock, UpdateDiamondZoneVisibility
+do
 local AttackSounds = IdSet({
     "100600301396617","101199185291628","101553872555606","101698569375359","104910828105172","105204810054381","105207247877248","105516183226360","105840448036441","106836941416453",
     "107345261604889","107401225947000","108360420637223","108610718831698","108651070773439","108907358619313","109348678063422","109570290393196","111295935549452","112809109188560",
@@ -1010,7 +891,7 @@ local PunchAnimations = IdSet({"87259391926321","140703210927645","1360070654009
 
 local LastBlock = 0
 
-local VisualCheckBeam = Instance.new("Part")
+VisualCheckBeam = Instance.new("Part")
 VisualCheckBeam.Name         = "FlexVisualCheckBeam"
 VisualCheckBeam.Anchored     = true
 VisualCheckBeam.CanCollide   = false
@@ -1063,7 +944,7 @@ local function DoBlock(KillerRoot)
 end
 
 local BlockWatchers = {}
-local HitboxFolder = Instance.new("Folder"); HitboxFolder.Name = "FlexSakenHitboxes"; HitboxFolder.Parent = workspace
+HitboxFolder = Instance.new("Folder"); HitboxFolder.Name = "FlexSakenHitboxes"; HitboxFolder.Parent = workspace
 local CustomHitboxSize   = Vector3.new(5.2, 6, 5.65)
 local CustomHitboxOffset = CFrame.new(0, 0, -3.5)
 
@@ -1123,7 +1004,7 @@ local function WatchKiller(Killer)
 end
 
 local KillerAddedConnection
-local function SetAutoBlock(Enabled)
+function SetAutoBlock(Enabled)
     State.AutoBlock = Enabled
     if Enabled then
         if not KillersFolder then return end
@@ -1139,7 +1020,6 @@ local function SetAutoBlock(Enabled)
     end
 end
 
---// VisualCheck beam loop //
 local _visualTick = 0
 RunService.Heartbeat:Connect(function()
     _visualTick += 1
@@ -1166,7 +1046,6 @@ RunService.Heartbeat:Connect(function()
     else VisualBeam.Enabled = false end
 end)
 
---// Punch aimbot //
 local AimConnection
 local function StopAiming()
     if AimConnection then AimConnection:Disconnect(); AimConnection = nil end
@@ -1219,8 +1098,210 @@ table.insert(CharacterCallbacks, function()
     end)
 end)
 
---// PING DISPLAY //
+-- ============================================================
+-- DIAMOND ZONE AUTO BLOCK ENGINE
+-- ============================================================
+local DZ = { running=false, connections={}, folder=nil, killerZones={} }
+local DZ_PLAYER_R = 1.5
+local DZ_ZONE_OFF = 0.15
+local DZ_DIA_H    = 3
+local DZ_CIR_H    = 1
 
+local function DZ_GetColor()      return Color3.fromRGB(255, 60, 60) end
+local function DZ_GetReadyColor() return Color3.fromRGB(80, 255, 80) end
+
+local function DZ_IsPlayerKiller()
+    if not KillersFolder or not LocalPlayer then return false end
+    return KillersFolder:FindFirstChild(LocalPlayer.Name) ~= nil
+end
+
+local function DZ_ComputeFootOff(k, kr)
+    local names = {"LeftFoot","RightFoot","Left Leg","Right Leg","LeftLowerLeg","RightLowerLeg"}
+    local low = nil
+    for _, n in ipairs(names) do
+        local p = k:FindFirstChild(n)
+        if p and p:IsA("BasePart") then
+            local b = p.Position.Y - p.Size.Y / 2
+            if not low or b < low then low = b end
+        end
+    end
+    return (low and (low - kr.Position.Y)) or -3
+end
+
+local function DZ_GetBaseY(kr, z) return kr.Position.Y + (z.footOffsetY or -3) + DZ_ZONE_OFF end
+
+local function DZ_GetFlatLook(kr, y)
+    local lv = kr.CFrame.LookVector
+    local f  = Vector3.new(lv.X, 0, lv.Z)
+    if f.Magnitude < 0.01 then f = Vector3.new(0, 0, -1) else f = f.Unit end
+    local p  = Vector3.new(kr.Position.X, y, kr.Position.Z)
+    return CFrame.lookAt(p, p + f)
+end
+
+local function DZ_IsInDiamond(myPos, kCF, kPos)
+    local fwd = kCF.LookVector; local rgt = kCF.RightVector
+    local ff  = Vector3.new(fwd.X, 0, fwd.Z); local rr = Vector3.new(rgt.X, 0, rgt.Z)
+    if ff.Magnitude < 0.01 or rr.Magnitude < 0.01 then return false end
+    ff = ff.Unit; rr = rr.Unit
+    local tp  = Vector3.new(myPos.X - kPos.X, 0, myPos.Z - kPos.Z)
+    local dF  = tp:Dot(ff); local dR = tp:Dot(rr)
+    local L   = State.DZ_DiamondLength or 8
+    local W   = State.DZ_DiamondWidth  or 4
+    local off = State.DZ_DiamondOffset or 3
+    local cd  = off + L / 2
+    local d   = dF - cd
+    local hw  = W / 2 + DZ_PLAYER_R; local hl = L / 2 + DZ_PLAYER_R
+    local dY  = math.abs(myPos.Y - kPos.Y)
+    if dY > 10 + DZ_PLAYER_R then return false end
+    return math.abs(dR) / hw + math.abs(d) / hl <= 1
+end
+
+local function DZ_IsInCircle(myPos, kPos)
+    local dx = myPos.X - kPos.X; local dz = myPos.Z - kPos.Z
+    local r  = (State.DZ_CircleRadius or 5) + DZ_PLAYER_R
+    local dY = math.abs(myPos.Y - kPos.Y)
+    if dY > 10 + DZ_PLAYER_R then return false end
+    return dx * dx + dz * dz <= r * r
+end
+
+local function DZ_IsInZone(k)
+    if not k or not k.Parent then return false end
+    local kr = k:FindFirstChild("HumanoidRootPart")
+    local c  = LocalPlayer.Character
+    local mr = c and c:FindFirstChild("HumanoidRootPart")
+    if not kr or not mr then return false end
+    return DZ_IsInDiamond(mr.Position, kr.CFrame, kr.Position)
+        or DZ_IsInCircle(mr.Position, kr.Position)
+end
+
+local function DZ_BuildZone(k)
+    local m  = Instance.new("Model"); m.Name = "FlexDiamondZone_" .. k.Name; m.Parent = DZ.folder
+    local kr = k:FindFirstChild("HumanoidRootPart")
+    local fo = (kr and DZ_ComputeFootOff(k, kr)) or -3
+    local edges = {}
+    for i = 1, 4 do
+        local p = Instance.new("Part"); p.Name = "Edge" .. i
+        p.Anchored = true; p.CanCollide = false; p.CanQuery = false; p.CanTouch = false; p.CastShadow = false
+        p.Material = Enum.Material.Neon; p.Color = DZ_GetColor()
+        p.Transparency = 0.6; p.Size = Vector3.new(0.35, 0.08, 1)
+        p.CFrame = CFrame.new(0, -5000, 0); p.Parent = m; edges[i] = p
+    end
+    local c = Instance.new("Part"); c.Shape = Enum.PartType.Cylinder; c.Name = "Circle"
+    c.Anchored = true; c.CanCollide = false; c.CanQuery = false; c.CanTouch = false; c.CastShadow = false
+    c.Material = Enum.Material.Neon; c.Color = DZ_GetColor()
+    c.Transparency = 0.7; c.Size = Vector3.new(DZ_CIR_H, 10, 10)
+    c.CFrame = CFrame.new(0, -5000, 0); c.Parent = m
+    return { model = m, edges = edges, circle = c, killer = k, footOffsetY = fo }
+end
+
+local function DZ_UpdateZone(z, kr, mr)
+    if not z or not z.model or not z.model.Parent or not kr or not kr.Parent then return end
+    if DZ_IsPlayerKiller() then
+        for _, e in ipairs(z.edges) do if e and e.Parent then e.Transparency = 1 end end
+        if z.circle and z.circle.Parent then z.circle.Transparency = 1 end
+        return
+    end
+    local L   = State.DZ_DiamondLength or 8
+    local W   = State.DZ_DiamondWidth  or 4
+    local off = State.DZ_DiamondOffset or 3
+    local bY  = DZ_GetBaseY(kr, z)
+    local dCF = DZ_GetFlatLook(kr, bY + DZ_DIA_H)
+    local cCF = DZ_GetFlatLook(kr, bY + DZ_CIR_H)
+    local wA  = dCF:PointToWorldSpace(Vector3.new(0,     0, -off))
+    local wB  = dCF:PointToWorldSpace(Vector3.new(0,     0, -(off + L)))
+    local wC  = dCF:PointToWorldSpace(Vector3.new(-W/2,  0, -(off + L/2)))
+    local wD  = dCF:PointToWorldSpace(Vector3.new( W/2,  0, -(off + L/2)))
+    local specs = { {wA, wC}, {wA, wD}, {wB, wC}, {wB, wD} }
+    local showDiamond = State.DZ_ShowDiamond and State.DiamondZoneAB
+    local showCircle  = State.DZ_ShowCircle  and State.DiamondZoneAB
+    for i, sp in ipairs(specs) do
+        local p1, p2 = sp[1], sp[2]
+        local mid = (p1 + p2) / 2; local diff = p2 - p1; local len = diff.Magnitude
+        if len > 0.01 then
+            local e = z.edges[i]; if e then
+                e.Size   = Vector3.new(0.35, 0.08, len)
+                e.CFrame = CFrame.lookAt(mid, mid + diff.Unit)
+                e.Transparency = showDiamond and 0.6 or 1
+            end
+        end
+    end
+    if z.circle then
+        local cc = cCF.Position
+        local r  = State.DZ_CircleRadius or 5
+        z.circle.Size  = Vector3.new(DZ_CIR_H, r * 2, r * 2)
+        z.circle.CFrame = CFrame.new(cc) * CFrame.Angles(0, 0, math.rad(90))
+        z.circle.Transparency = showCircle and 0.7 or 1
+    end
+    local inD = DZ_IsInDiamond(mr.Position, kr.CFrame, kr.Position)
+    local inC = DZ_IsInCircle(mr.Position, kr.Position)
+    local nc = DZ_GetColor(); local rc = DZ_GetReadyColor()
+    for _, e in ipairs(z.edges) do if e and e.Parent then e.Color = inD and rc or nc end end
+    if z.circle and z.circle.Parent then z.circle.Color = inC and rc or nc end
+end
+
+local function DZ_Start()
+    if DZ.running then return end
+    DZ.running = true; DZ.connections = {}; DZ.killerZones = {}
+    DZ.folder = Instance.new("Folder"); DZ.folder.Name = "FlexDiamondZoneVisuals"; DZ.folder.Parent = Workspace
+    local lastFire = {}
+    local function step()
+        if not DZ.running or DZ_IsPlayerKiller() then return end
+        local kf = KillersFolder; if not kf then return end
+        local c  = LocalPlayer.Character; local mr = c and c:FindFirstChild("HumanoidRootPart"); if not mr then return end
+        for _, k in ipairs(kf:GetChildren()) do
+            if k:IsA("Model") then
+                local kr = k:FindFirstChild("HumanoidRootPart"); if not kr then continue end
+                local z  = DZ.killerZones[k]
+                if not z or not z.model or not z.model.Parent then
+                    if z and z.model then pcall(function() z.model:Destroy() end) end
+                    z = DZ_BuildZone(k); DZ.killerZones[k] = z
+                end
+                DZ_UpdateZone(z, kr, mr)
+                -- fire block when player enters zone
+                if State.DiamondZoneAB then
+                    if DZ_IsInZone(k) then
+                        local now = os.clock()
+                        if not lastFire[k] or now - lastFire[k] > 0.1 then
+                            lastFire[k] = now
+                            pcall(DoBlock, kr)
+                        end
+                    end
+                end
+            end
+        end
+        -- cull killers that left workspace
+        for k, z in pairs(DZ.killerZones) do
+            if not k.Parent or not k:IsDescendantOf(Workspace) then
+                if z.model then pcall(function() z.model:Destroy() end) end
+                DZ.killerZones[k] = nil; lastFire[k] = nil
+            end
+        end
+    end
+    table.insert(DZ.connections, RunService.Heartbeat:Connect(step))
+end
+
+local function DZ_Stop()
+    if not DZ.running then return end
+    DZ.running = false
+    for _, c in ipairs(DZ.connections) do pcall(function() c:Disconnect() end) end
+    DZ.connections = {}
+    for _, z in pairs(DZ.killerZones) do if z.model then pcall(function() z.model:Destroy() end) end end
+    DZ.killerZones = {}
+    if DZ.folder then pcall(function() DZ.folder:Destroy() end); DZ.folder = nil end
+end
+
+function UpdateDiamondZoneVisibility()
+    local need = State.DiamondZoneAB
+        or (State.DZ_ShowDiamond and State.DiamondZoneAB)
+        or (State.DZ_ShowCircle  and State.DiamondZoneAB)
+    if need and not DZ.running then DZ_Start()
+    elseif not need and DZ.running then DZ_Stop() end
+end
+-- ============================================================
+end -- scope
+
+local SetShowPing, GetSprinting, SetInfiniteStamina
+do
 local PingGui; local PingToken = 0
 local function GetPingColor(Ping)
     if Ping <= 60 then return Color3.fromRGB(60, 220, 80)
@@ -1228,7 +1309,7 @@ local function GetPingColor(Ping)
     elseif Ping <= 200 then return Color3.fromRGB(255, 150, 40)
     else return Color3.fromRGB(220, 20, 60) end
 end
-local function SetShowPing(Enabled)
+function SetShowPing(Enabled)
     PingToken += 1; if PingGui then PingGui:Destroy(); PingGui = nil end; if not Enabled then return end
     local Token = PingToken
     local Gui   = Instance.new("ScreenGui"); Gui.Name = "PingDisplay"; Gui.ResetOnSpawn = false; Gui.Parent = PlayerGui
@@ -1252,16 +1333,14 @@ local function SetShowPing(Enabled)
     end)
 end
 
---// SPRINTING / INFINITE STAMINA //
-
 local SprintingModule; local SprintingHooked = false
-local function GetSprinting()
+function GetSprinting()
     if SprintingModule then return SprintingModule end
     local Success, Module = pcall(function() return require(ReplicatedStorage.Systems.Character.Game.Sprinting) end)
     if Success and type(Module) == "table" then SprintingModule = Module end
     return SprintingModule
 end
-local function SetInfiniteStamina(Enabled)
+function SetInfiniteStamina(Enabled)
     local Sprinting = GetSprinting()
     if not Sprinting then Notify("Infinite Stamina", "Could not find the sprinting module", 4); return end
     if not SprintingHooked and typeof(Sprinting.Init) == "function" then
@@ -1274,20 +1353,7 @@ local function SetInfiniteStamina(Enabled)
     end
     Sprinting.StaminaLossDisabled = Enabled and true or false
 end
-
---// Fix credits: luna <3 //
-
---// Fixed path: round folder is Workspace.Map.Ingame, not Workspace.Ingame //
---// New: generators live in Workspace.Map.Ingame.Map //
---// New: fires cb whenever a new Workspace.Map.Ingame appears (new round / new map) //
---// Fixed dup check: only skips if a parent is already highlighted, no more hiding sibling items //
---// Fixed generators: scan Ingame.Map instead of the wrong folder //
---// Fixed items: workspace-wide scan + live hook for BloxyCola and Medkit //
---// Fixed items: start the item hook and initial scan //
---// Fixed items: disconnect the item hook on stop //
---// Fixed map watcher: listens on Map.Ingame so ESP restarts every round //
---// Fixed plant watcher: rebinds on new Map.Ingame //
---// Fixed minions: rebind and rescan every round //
+end -- scope
 
 pcall(function()
     local tabESP = Window:Tab({ Title = "ESP", Icon = "eye" })
@@ -1423,13 +1489,11 @@ pcall(function()
         end
         local label = genLabels[obj]
         if not label or not label.Parent then
-            --// Try the tracked billboard first (set by addTarget), then fall back to a child search //
             local bb = esp.billboards[obj] or obj:FindFirstChildWhichIsA("BillboardGui")
             if bb then
                 label = bb:FindFirstChildWhichIsA("TextLabel")
             end
             if label then
-                --// Make sure the billboard is configured for generator display //
                 local bb2 = label.Parent
                 if bb2 and bb2:IsA("BillboardGui") then
                     bb2.Enabled       = true
@@ -1440,7 +1504,7 @@ pcall(function()
                 end
                 genLabels[obj] = label
             else
-                return  --// billboard not ready yet, will be called again on next attribute change //
+                return
             end
         end
         local txt, col = fmtGen(progress)
@@ -1478,7 +1542,6 @@ pcall(function()
             if a == "Progress" or a == "Charge" then pcall(refreshGen, obj) end
         end))
         genConns[obj] = conns
-        --// Deferred so addTarget has time to parent the BillboardGui before we try to find it //
         task.defer(function() pcall(refreshGen, obj) end)
         task.delay(0.2, function() pcall(refreshGen, obj) end)
     end
@@ -2416,7 +2479,6 @@ pcall(function()
         end }) end end)
     end
 
-    --// Gear ESP //
     --// Credits: Luna/Emily //
     do
         local GEAR_PATH = { "Map", "Ingame", "Map", "GearsTest", "Gear" }
@@ -2514,8 +2576,8 @@ pcall(function()
     end
 end)
 
---// MISC FEATURES //
-
+local SetAntiSlowness, ApplyJumping, ApplyInjury, ApplyBlindness, SetFreeZoom, SetCameraNoclip, SetFullbright, SetDeleteRagdolls, SetSpeedBoost, SetFlight, TPToItem, SetAutoDisarm, HandleNoliNPC, Handle007n7NPC, SetAntiHiddenStats, SetKillerWalls, SetShowChat, SetFov, RejoinServer
+do
 local function CheckSlowness(ValueInstance)
     if not State.AntiSlowness or not ValueInstance or not ValueInstance:IsA("NumberValue") then return end
     local Name = ValueInstance.Name
@@ -2526,12 +2588,12 @@ local function CheckSlowness(ValueInstance)
     elseif ValueInstance.Value > 0.03 and ValueInstance.Value < 1 then ValueInstance:Destroy()
     else ValueInstance:GetPropertyChangedSignal("Value"):Connect(function() if ValueInstance.Value > 0.03 and ValueInstance.Value < 1 then ValueInstance:Destroy() end end) end
 end
-local function SetAntiSlowness(Enabled) if Enabled and SpeedMultipliers then for _, Child in SpeedMultipliers:GetChildren() do CheckSlowness(Child) end end end
+function SetAntiSlowness(Enabled) if Enabled and SpeedMultipliers then for _, Child in SpeedMultipliers:GetChildren() do CheckSlowness(Child) end end end
 table.insert(CharacterCallbacks, function()
     if SpeedMultipliers then SpeedMultipliers.ChildAdded:Connect(CheckSlowness); SetAntiSlowness(State.AntiSlowness) end
 end)
 
-local function ApplyJumping()
+function ApplyJumping()
     if not LocalHumanoid then return end
     if State.EnableJumping then
         if LocalHumanoid:GetAttribute("SAB_JumpPower") == nil then LocalHumanoid:SetAttribute("SAB_JumpPower", LocalHumanoid.JumpPower) end
@@ -2542,7 +2604,7 @@ local function ApplyJumping()
 end
 table.insert(CharacterCallbacks, function() task.wait(0.25); ApplyJumping() end)
 
-local function ApplyInjury()
+function ApplyInjury()
     local TempUI = PlayerGui:FindFirstChild("TemporaryUI")
     if TempUI then
         for _, Object in TempUI:GetDescendants() do
@@ -2552,7 +2614,7 @@ local function ApplyInjury()
     local Desaturation = Lighting:FindFirstChild("HealthDesaturation")
     if Desaturation then Desaturation.Enabled = not State.HideInjury end
 end
-local function ApplyBlindness()
+function ApplyBlindness()
     local Blur = Lighting:FindFirstChild("BlindnessBlur")
     if Blur and Blur:IsA("BlurEffect") then Blur.Enabled = not State.DisableBlindness end
 end
@@ -2563,11 +2625,11 @@ end)
 
 local DefaultZoom      = LocalPlayer.CameraMaxZoomDistance
 local DefaultOcclusion = LocalPlayer.DevCameraOcclusionMode
-local function SetFreeZoom(Enabled) LocalPlayer.CameraMaxZoomDistance = Enabled and math.huge or DefaultZoom end
-local function SetCameraNoclip(Enabled) LocalPlayer.DevCameraOcclusionMode = Enabled and Enum.DevCameraOcclusionMode.Invisicam or DefaultOcclusion end
+function SetFreeZoom(Enabled) LocalPlayer.CameraMaxZoomDistance = Enabled and math.huge or DefaultZoom end
+function SetCameraNoclip(Enabled) LocalPlayer.DevCameraOcclusionMode = Enabled and Enum.DevCameraOcclusionMode.Invisicam or DefaultOcclusion end
 
 local LightingSaved; local FullbrightToken = 0
-local function SetFullbright(Enabled)
+function SetFullbright(Enabled)
     FullbrightToken += 1
     if Enabled then
         if not LightingSaved then LightingSaved = { Brightness = Lighting.Brightness, Ambient = Lighting.Ambient, OutdoorAmbient = Lighting.OutdoorAmbient, GlobalShadows = Lighting.GlobalShadows } end
@@ -2583,7 +2645,7 @@ local function SetFullbright(Enabled)
 end
 
 local RagdollConnection
-local function SetDeleteRagdolls(Enabled)
+function SetDeleteRagdolls(Enabled)
     if RagdollConnection then RagdollConnection:Disconnect(); RagdollConnection = nil end
     local Folder = workspace:FindFirstChild("Ragdolls"); if not Enabled or not Folder then return end
     Folder:ClearAllChildren()
@@ -2596,7 +2658,7 @@ local function FirePrompt(Prompt)
 end
 
 local SpeedToken = 0
-local function SetSpeedBoost(Enabled)
+function SetSpeedBoost(Enabled)
     SpeedToken += 1; if not Enabled then return end; local Token = SpeedToken
     task.spawn(function()
         while Token == SpeedToken do
@@ -2631,7 +2693,7 @@ local function StartFlight()
         Head.CFrame  = CFrame.new(HeadPos) * (CamCF - CamPos) * CFrame.new(Moved)
     end)
 end
-local function SetFlight(Enabled) if Enabled then StartFlight() else StopFlight() end end
+function SetFlight(Enabled) if Enabled then StartFlight() else StopFlight() end end
 table.insert(CharacterCallbacks, function() if State.Flight then task.wait(0.5); StartFlight() end end)
 
 local function FakeNoliStep()
@@ -2665,7 +2727,7 @@ local function AutoPickupStep()
     end
 end
 
-local function TPToItem(ItemName)
+function TPToItem(ItemName)
     if not LocalRoot or not LocalCharacter then return end
     local TargetItem = nil
     for _, obj in pairs(workspace:GetDescendants()) do
@@ -2694,7 +2756,7 @@ local function AutoEscapeStep()
 end
 
 local CurrentQTEAzure; local AzureHooked = false
-local function SetAutoDisarm(Enabled)
+function SetAutoDisarm(Enabled)
     if Enabled and typeof(CurrentQTEAzure) == "table" and typeof(CurrentQTEAzure.AddProgress) == "function" then
         CurrentQTEAzure:AddProgress(100); CurrentQTEAzure = nil
     end
@@ -2733,7 +2795,7 @@ local function ApplyInGameObjects()
     end
 end
 
-local function HandleNoliNPC()
+function HandleNoliNPC()
     if not KillersFolder or not InGame then return end
     if State.DisableNoliNPC then
         for _, Model in KillersFolder:GetChildren() do
@@ -2750,7 +2812,7 @@ local function HandleNoliNPC()
     end
 end
 
-local function Handle007n7NPC()
+function Handle007n7NPC()
     if not InGame then return end
     if State.Disable007n7NPC then
         for _, Model in InGame:GetChildren() do
@@ -2779,17 +2841,17 @@ local function ApplyHiddenStats(Player)
         end
     end
 end
-local function SetAntiHiddenStats() for _, Player in Players:GetPlayers() do ApplyHiddenStats(Player) end end
+function SetAntiHiddenStats() for _, Player in Players:GetPlayers() do ApplyHiddenStats(Player) end end
 Players.PlayerAdded:Connect(function(Player) task.delay(2, function() if State.AntiHiddenStats then ApplyHiddenStats(Player) end end) end)
 
-local function SetKillerWalls(Enabled)
+function SetKillerWalls(Enabled)
     for _, Object in workspace:GetDescendants() do
         if Object.Name == "KillerDoors" then for _, Wall in Object:GetChildren() do if Wall:IsA("BasePart") then Wall.CanCollide = not Enabled end end end
     end
 end
 
 local ChatToken = 0
-local function SetShowChat(Enabled)
+function SetShowChat(Enabled)
     ChatToken += 1; if not Enabled then return end; local Token = ChatToken
     task.spawn(function()
         while Token == ChatToken do
@@ -2799,7 +2861,7 @@ local function SetShowChat(Enabled)
 end
 
 local DefaultFov; local FovToken = 0
-local function SetFov(Enabled)
+function SetFov(Enabled)
     FovToken += 1; local Camera = workspace.CurrentCamera
     if Enabled then
         if Camera and not DefaultFov then DefaultFov = Camera.FieldOfView end
@@ -2810,7 +2872,7 @@ local function SetFov(Enabled)
     elseif Camera and DefaultFov then Camera.FieldOfView = DefaultFov; DefaultFov = nil end
 end
 
-local function RejoinServer()
+function RejoinServer()
     Notify("Rejoin", "Rejoining...", 3)
     if workspace:GetAttribute("ServerType") == "VIP" then TeleportService:Teleport(game.PlaceId)
     else TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId) end
@@ -2824,8 +2886,7 @@ task.spawn(function()
         if State.DisableTrails or State.DisableFootprints or State.SmallSpikes then pcall(ApplyInGameObjects) end
     end
 end)
-
---// FEATURE TABLE (Chance, Shadows, Fog, Stamina, DashTurn, Azure, Config, Emotes, Anim, Music, Tricks, TT, Minigame, PlusAnim, PlusMisc) //
+end -- scope
 
 local Feature = {}
 
@@ -2841,7 +2902,6 @@ Feature.JD_UnhookCrystalPitch = function() end
 
 Risky("Chance shoot & coin flip", function()
     local ChanceShootConnection; local ChanceCoinToken = 0
-    --// Chance aim upgrade: velocity / ping / look prediction with anti-bait speed cap //
     local ChanceMotion = setmetatable({}, { __mode = "k" })
     local KillerRunSpeed = { Slasher = 28, c00lkidd = 28, JohnDoe = 27.25, ["1x1x1x1"] = 27, Noli = 27.5, Guest666 = 27, Nosferatu = 27.5, Doombringer = 27, JaneDoe = 27, Builderman = 27.5, Dusekkar = 27.5 }
     local function ChanceSample(Root)
@@ -3334,8 +3394,10 @@ Risky("Music", function()
     end
 end)
 
---// GENERATOR SOLVER //
+-- generator solver
 
+local GenConfig, MinigameSolver, installMinigameHooks
+do
 local MinigameFolder, FlowBoardModule, LockBoardModule, FlowInputModule, GearInputModule, LockInputModule, ConnectInputModule
 Risky("GeneratorModules", function()
     local ok1, v1 = pcall(function() return ReplicatedStorage.Systems.Player.Game.Minigames end)
@@ -3366,14 +3428,14 @@ Risky("GeneratorModules", function()
     end
 end)
 
-local GenConfig = {
+GenConfig = {
     StartDelay   = 1.5,
     ActionDelay  = 0.05,
     ConnectDelay = 1.0,
     GearDelay    = 0.03,
 }
 
-local MinigameSolver = {
+MinigameSolver = {
     Enabled       = false,
     ManualEnabled = false,
     AutoEnabled   = false,
@@ -3475,7 +3537,7 @@ local function solveFlowBoard(board)
     return search(remaining) and answer or nil
 end
 
-local function installMinigameHooks()
+function installMinigameHooks()
     if MinigameSolver.Installed then return end
     if not (FlowBoardModule and LockBoardModule and FlowInputModule and ConnectInputModule) then
         warn("[FlexSaken] Cannot install minigame hooks — required modules missing")
@@ -3512,7 +3574,7 @@ local function installMinigameHooks()
                 end
                 pcall(function() board:Release(drawing, true) end)
                 pcall(function() renderer:Render() end); task.wait(solverDelay())
-                end --// close if ok and drawing //
+                end
             end
             if stillSolving(token, object) then
                 local solved = pcall(function() return board:IsSolved() end) and board:IsSolved()
@@ -3564,11 +3626,10 @@ local function installMinigameHooks()
         task.spawn(function()
             if not waitForSolver(object) then return end
             task.wait(math.max(0.55, solverDelay()))
-            local deadline = os.clock() + 30  --// hard timeout: never spin forever //
+            local deadline = os.clock() + 30  -- hard timeout
             for _ = 1, 400 do
                 if not stillSolving(token, object) then return end
                 if os.clock() > deadline then return end
-                --// Stop as soon as the minigame object signals completion //
                 if object.Ended then
                     MinigameSolver.Generation += 1
                     return
@@ -3576,7 +3637,6 @@ local function installMinigameHooks()
                 pcall(function() callbacks.OnTurn(90) end)
                 task.wait(math.max(0, GenConfig.GearDelay or 0.03))
             end
-            --// Finished all turns — bump generation so we don't re-enter //
             MinigameSolver.Generation += 1
         end)
         return object
@@ -3589,7 +3649,7 @@ local function installMinigameHooks()
         local token  = MinigameSolver.Generation
         task.spawn(function()
             if not waitForSolver(object) then return end
-            local deadline = os.clock() + 30  --// hard timeout //
+            local deadline = os.clock() + 30  -- hard timeout
             while stillSolving(token, object) and board do
                 if os.clock() > deadline or object.Ended then
                     MinigameSolver.Generation += 1
@@ -3615,17 +3675,19 @@ local function installMinigameHooks()
 end
 
 pcall(installMinigameHooks)
+end -- scope
 
---// FOURTH BLOCK BUTTON (in-game on/off button for Auto Block) //
+-- auto block button
 
-local FourthBlock = { running = false, connections = {}, instance = nil, cachedPos = nil, cachedSize = nil, sourceName = nil, applyTint = nil }
+local FourthBlock, StartFourthButton, StopFourthButton
+do
+FourthBlock = { running = false, connections = {}, instance = nil, cachedPos = nil, cachedSize = nil, sourceName = nil, applyTint = nil }
 
-local function StartFourthButton()
+function StartFourthButton()
     if FourthBlock.running then return end
     FourthBlock.running = true
     FourthBlock.connections = {}
 
-    --// Destroy any leftover instance from a previous run //
     do
         local m = PlayerGui:FindFirstChild("MainUI")
         if m then
@@ -3637,7 +3699,6 @@ local function StartFourthButton()
         end
     end
 
-    --// Tint function: green when AutoBlock is on, red when off //
     FourthBlock.applyTint = function()
         local b = FourthBlock.instance
         if not b or not b.Parent then return end
@@ -3652,8 +3713,7 @@ local function StartFourthButton()
         end
     end
 
-    --// Debounced toggle: flips State.AutoBlock via SetAutoBlock //
-    --// and syncs the UI toggle so the tab reflects the real state //
+    -- debounced, flips auto block and syncs the tab toggle
     local toggleLastTick = 0
     local TOGGLE_COOLDOWN = 0.15
     local function Toggle()
@@ -3662,27 +3722,18 @@ local function StartFourthButton()
         toggleLastTick = now
         local newVal = not State.AutoBlock
         SetAutoBlock(newVal)
-        --// Sync the tab toggle so it matches button state //
         pcall(function()
             local reg = Registry["AutoBlock"]
             if reg and reg.Element and typeof(reg.Element.Set) == "function" then
                 reg.Element:Set(newVal)
             end
         end)
-        --// Start or stop the block system //
-        if newVal then
-            StartFourthButton()
-        else
-            StopFourthButton()
-        end
-        --// Tint after start/stop settles //
         task.defer(function()
             if FourthBlock.applyTint then FourthBlock.applyTint() end
         end)
         Notify("Auto Block", newVal and "Auto Block ON" or "Auto Block OFF", 2)
     end
 
-    --// Cache absolute position/size every frame for hit-testing fallback //
     table.insert(FourthBlock.connections, RunService.RenderStepped:Connect(function()
         if not FourthBlock.running then return end
         local b = FourthBlock.instance
@@ -3695,7 +3746,6 @@ local function StartFourthButton()
         end
     end))
 
-    --// Hit-test helper using GetGuiObjectsAtPosition with AABB fallback //
     local function IsOnButton(pos)
         local btn = FourthBlock.instance
         if not btn or not btn.Parent then return false end
@@ -3709,7 +3759,6 @@ local function StartFourthButton()
         return pos.X >= p.X and pos.X <= p.X + s.X and pos.Y >= p.Y and pos.Y <= p.Y + s.Y
     end
 
-    --// Touch/click detection: track press start, fire Toggle on release if short tap //
     local downPos, downTime = nil, 0
     table.insert(FourthBlock.connections, UserInputService.InputBegan:Connect(function(input)
         if not FourthBlock.running then return end
@@ -3722,12 +3771,11 @@ local function StartFourthButton()
         if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then return end
         if not downPos then return end
         local held = tick() - downTime; downPos = nil
-        if held > 0.5 then return end   --// ignore long-press //
+        if held > 0.5 then return end  -- ignore long press
         if not IsOnButton(input.Position) then return end
         Toggle()
     end))
 
-    --// Bind click events to every GuiButton in the clone //
     local function BindAll(root)
         if not root then return end
         local function tb(obj)
@@ -3740,7 +3788,7 @@ local function StartFourthButton()
         for _, d in ipairs(root:GetDescendants()) do if d:IsA("GuiObject") then tb(d) end end
     end
 
-    --// Background loop: creates / refreshes the clone button every 0.5 s //
+    -- keeps the clone alive
     task.spawn(function()
         while FourthBlock.running do
             task.wait(0.5)
@@ -3749,11 +3797,9 @@ local function StartFourthButton()
             if m then
                 local c = m:FindFirstChild("AbilityContainer", true)
                 if c then
-                    --// Pick source: Block button (most skins) or Clone button (007n7) //
                     local blockBtn = c:FindFirstChild("Block")
                     local cloneBtn = c:FindFirstChild("Clone")
                     local orig = blockBtn or cloneBtn
-                    --// prefer Clone for 007n7 character //
                     if blockBtn and cloneBtn and LocalCharacter and LocalCharacter.Name == "007n7" then
                         orig = cloneBtn
                     end
@@ -3779,7 +3825,7 @@ local function StartFourthButton()
                         clone.Name = "FourthBlockAbility"
                         clone.LayoutOrder = 4
                         if clone:IsA("GuiObject") then clone.ZIndex = 50 end
-                        --// Clear any Block/Clone text labels so it looks like a plain button //
+                        -- strip the text so it looks like a plain button
                         for _, d in ipairs(clone:GetDescendants()) do
                             if d:IsA("TextLabel") or d:IsA("TextButton") then
                                 local t = d.Text:lower()
@@ -3807,31 +3853,21 @@ local function StartFourthButton()
     print("[FlexSaken] AutoBlockButton ON")
 end
 
-local function StopFourthButton()
+function StopFourthButton()
     if not FourthBlock.running then return end
     FourthBlock.running = false
     for _, c in ipairs(FourthBlock.connections) do pcall(function() c:Disconnect() end) end
     FourthBlock.connections = {}
-    --// Keep the button visible — tint red to show it's off //
     local b = FourthBlock.instance
-    if b and b.Parent then
-        local redCol = Color3.fromRGB(255, 0, 0)
-        pcall(function()
-            if b:IsA("ImageButton") or b:IsA("ImageLabel") then b.ImageColor3 = redCol end
-            for _, d in ipairs(b:GetDescendants()) do
-                if d:IsA("ImageLabel") or d:IsA("ImageButton") then
-                    d.ImageColor3 = redCol
-                elseif d:IsA("Frame") and d.BackgroundTransparency < 1 then
-                    d.BackgroundColor3 = redCol
-                end
-            end
-        end)
-    end
-    --// Do NOT nil or destroy instance — button stays on screen //
-    print("[FlexSaken] AutoBlockButton OFF")
+    if b then pcall(function() b:Destroy() end) end
+    FourthBlock.instance = nil
+    FourthBlock.sourceName = nil
+    FourthBlock.cachedPos = nil; FourthBlock.cachedSize = nil
+    print("[FlexSaken] AutoBlockButton hidden")
 end
+end -- scope
 
---// JANE DOE — Crystal / Aimbot / Axe Lock //
+-- jane doe
 
 local JD = {
     Enabled = false, Aimbot = false, Axe = false,
@@ -3845,7 +3881,6 @@ local JD = {
 Risky("JaneDoe", function()
     local function GetCamera() return Workspace.CurrentCamera end
 
-    --// Crystal config (instant charge / infinite hold) //
     local function ApplyCrystalCfg(Cfg)
         pcall(function()
             if setreadonly then setreadonly(Cfg, false) end
@@ -3860,7 +3895,6 @@ Risky("JaneDoe", function()
                 Cfg.MinChargeTime = Bak.Min
                 Cfg.MaxChargeTime = Bak.Max
             end
-            --// huge finite value instead of 1/0 so charge math never hits inf/NaN //
             Cfg.MaximumHoldTime = JD.InfHold and 1e9 or Bak.Hold
         end)
     end
@@ -3894,7 +3928,6 @@ Risky("JaneDoe", function()
         for Cfg in pairs(JD.CrystalBackup) do ApplyCrystalCfg(Cfg) end
     end
 
-    --// Killer helpers //
     local function KillerVelocity(Root)
         if not Root then return Vector3.zero end
         local Now, Pos = tick(), Root.Position
@@ -3926,7 +3959,6 @@ Risky("JaneDoe", function()
         return Best
     end
 
-    --// Axe lock-on //
     local function AxeLock()
         local Ok = pcall(function()
             if JD.AxeLocked then return end
@@ -3964,7 +3996,6 @@ Risky("JaneDoe", function()
         if not Ok then JD.AxeLocked = false end
     end
 
-    --// Silent aim camera solver (ballistic arc) //
     local function BuildCameraCF(MyRoot, KillerRoot, V0, G)
         local Ok, Result = pcall(function()
             local Cam = GetCamera()
@@ -4024,7 +4055,6 @@ Risky("JaneDoe", function()
         JD.Patched = false
     end
 
-    --// Watch for the Axe ability firing //
     task.spawn(function()
         local Event
         pcall(function()
@@ -4042,10 +4072,8 @@ Risky("JaneDoe", function()
         end)
     end)
 
-    --// Reset killer motion cache when the character changes //
     LocalPlayer.CharacterAdded:Connect(function() JD.Motion = {} end)
 
-    --// Exposed to the UI //
     Feature.JD_SetEnabled = function(On)
         JD.Enabled = On
         if On and not JD.Patched then ApplyPatch() end
@@ -4074,11 +4102,9 @@ Risky("JaneDoe", function()
     end
 end)
 
---// AUTO BACKSTAB v4 (Two-Time) //
---// Credits: auto_backstab_v4 //
+-- backstab
 
 local BS = {
-    --// toggles //
     isEnabled          = false,
     isAutoStudsEnabled = false,
     isDetectPingEnabled= false,
@@ -4087,7 +4113,6 @@ local BS = {
     moredirectend      = false,
     distcheck          = false,
     isDashstabEnabled  = false,
-    --// values //
     startdelay         = 0.05,
     duration           = 0.2,
     behindstuds        = 4,
@@ -4095,11 +4120,9 @@ local BS = {
     autoStandStuds     = 5.5,
     autoRunStuds       = 3.4,
     dsStartDelay       = 0.1,
-    --// runtime //
     running            = false,
     doitmate           = false,
-    speed              = nil,  --// set after character loads //
-    --// auto-studs smoothing //
+    speed              = nil,  -- set after character loads
     lastKillerModel    = nil,
     lastKillerPos      = nil,
     smoothedSpeed      = 0,
@@ -4217,7 +4240,6 @@ function BS.runDashstabSequence()
     BS.running = false
 end
 
---// Hook FireServerConnection to spoof position during backstab //
 BS.NetworkModule = nil
 BS.oldFireServer  = nil
 
@@ -4267,7 +4289,6 @@ function BS.hookCharacter(character)
     local animator = humanoid:FindFirstChildOfClass("Animator") or humanoid:WaitForChild("Animator", 5)
     if not animator then return end
 
-    --// Cache the speed multiplier //
     local sm = character:FindFirstChild("SpeedMultipliers")
     if sm then BS.speed = sm:FindFirstChild("Sprinting") end
 
@@ -4297,7 +4318,6 @@ function BS.hookCharacter(character)
     end)
 end
 
---// Auto-studs heartbeat //
 RunService.Heartbeat:Connect(function(dt)
     if not BS.isAutoStudsEnabled then
         BS.lastKillerModel = nil; BS.smoothedSpeed = 0; return
@@ -4331,7 +4351,6 @@ RunService.Heartbeat:Connect(function(dt)
     end
 end)
 
---// Boot: hook network + character //
 task.spawn(function()
     task.wait(1)
     pcall(BS.hookNetwork)
@@ -4343,7 +4362,32 @@ task.spawn(function()
     end)
 end)
 
---// GUEST 1337 AUTO BLOCK STATE (for Auto Block tab) //
+-- g1337 auto block
+
+-- G1337 Diamond Zone geometry helpers (read same State.DZ_* values as DZ engine)
+local _DZ_G1337_PLAYER_R = 1.5
+local function DZ_IsInDiamond_G1337(myPos, kCF, kPos)
+    local fwd = kCF.LookVector; local rgt = kCF.RightVector
+    local ff  = Vector3.new(fwd.X, 0, fwd.Z); local rr = Vector3.new(rgt.X, 0, rgt.Z)
+    if ff.Magnitude < 0.01 or rr.Magnitude < 0.01 then return false end
+    ff = ff.Unit; rr = rr.Unit
+    local tp  = Vector3.new(myPos.X - kPos.X, 0, myPos.Z - kPos.Z)
+    local dF  = tp:Dot(ff); local dR = tp:Dot(rr)
+    local L   = State.DZ_DiamondLength or 8
+    local W   = State.DZ_DiamondWidth  or 4
+    local off = State.DZ_DiamondOffset or 3
+    local cd  = off + L / 2
+    local d   = dF - cd
+    local hw  = W / 2 + _DZ_G1337_PLAYER_R; local hl = L / 2 + _DZ_G1337_PLAYER_R
+    if math.abs(myPos.Y - kPos.Y) > 10 + _DZ_G1337_PLAYER_R then return false end
+    return math.abs(dR) / hw + math.abs(d) / hl <= 1
+end
+local function DZ_IsInCircle_G1337(myPos, kPos)
+    local dx = myPos.X - kPos.X; local dz = myPos.Z - kPos.Z
+    local r  = (State.DZ_CircleRadius or 5) + _DZ_G1337_PLAYER_R
+    if math.abs(myPos.Y - kPos.Y) > 10 + _DZ_G1337_PLAYER_R then return false end
+    return dx * dx + dz * dz <= r * r
+end
 
 local G1337 = {}
 G1337.killersFolder = workspace:FindFirstChild("Players") and workspace.Players:FindFirstChild("Killers")
@@ -4380,7 +4424,8 @@ G1337.settings = {
     autoblock = false, hd = false, onlyLooking = true, wallCheck = true,
     sphereRange = 11, sphereEsp = false, customEsp = false,
     boxLength = 15, boxWidth = 6, hdSpeed = 12,
-    reactTime = 0.01,
+    reactTime = 0.001,
+    g1337DiamondZone = false,  -- Diamond Zone fires block through G1337 remote
 }
 getgenv().PunchAimbot = getgenv().PunchAimbot or { Enabled = true, Mode = "Camera", Smoothness = 0.14, Prediction = 0.133 }
 getgenv().AutoPunch   = getgenv().AutoPunch   or { Enabled = false, Range = 50, ShowRange = false, TrueDash = false }
@@ -4398,7 +4443,6 @@ Risky("G1337Remote", function()
     if ok and r then
         G1337.remote = r
     else
-        --// Fallback: try the same remote already found by the main script //
         G1337.remote = Remote
     end
 end)
@@ -4415,21 +4459,15 @@ function G1337.isHelpless()
 end
 function G1337.canUseBlock()
     if G1337.isHelpless() then return false end
-    --// Try the Clipping size check first //
     local ok, clip = pcall(function()
         return LocalPlayer.PlayerGui.MainUI.AbilityContainer.Block.Clipping
     end)
     if ok and clip then
-        --// Clipping at full size = block is off cooldown //
         if clip.Size == UDim2.new(1,0,1,0) then return true end
-        --// Also accept if clip is >= 0.95 in Y (nearly full = ready) //
         if clip.Size.Y.Scale >= 0.95 then return true end
-        --// If clipping exists but is at 0,0 = fully on cooldown — block not ready //
         if clip.Size.Y.Scale <= 0.01 then return false end
-        --// Otherwise treat partial clip as ready (conservative fallback) //
         return true
     end
-    --// Fallback: if we can't find the clip element, check for a CooldownTime value //
     local ok2, btn = pcall(function()
         return LocalPlayer.PlayerGui.MainUI.AbilityContainer.Block
     end)
@@ -4439,10 +4477,8 @@ function G1337.canUseBlock()
         if cd and type(cd.Value) == "number" then
             return cd.Value <= 0.05
         end
-        --// No cooldown child found — assume block is usable //
         return true
     end
-    --// Can't determine state at all — allow it and let server reject if needed //
     return true
 end
 function G1337.hasLineOfSight(targetRoot)
@@ -4505,10 +4541,9 @@ function G1337.doHDPull(targetPos)
     end)
 end
 G1337.lastDashTime = 0
-local DASH_COOLDOWN = 0.4  --// seconds between allowed dashes, covers dash duration + punch cooldown //
+local DASH_COOLDOWN = 0.4  -- secs between dashes
 
 function G1337.TrueDash()
-    --// Guard: TrueDash toggle must be on AND AutoPunch must be on //
     if not getgenv().AutoPunch.TrueDash then return end
     if not getgenv().AutoPunch.Enabled then return end
     if G1337.dashing then return end
@@ -4626,7 +4661,7 @@ function G1337.updateESP()
             G1337.inBox[killerName] = inside
             box.Color = (inside and (not G1337.settings.wallCheck or los)) and Color3.new(0,1,0) or Color3.new(1,0,0)
         end
-        end --// close else (root exists) //
+        end
     end
 end
 
@@ -4656,55 +4691,81 @@ function G1337.Step()
     G1337.updateESP()
     G1337.UpdatePunchESP()
     if not G1337.killersFolder then return end
-    --// Auto punch handled by original TimesHit watcher (see CharacterCallbacks) //
-    if not (G1337.settings.autoblock or G1337.settings.hd) or not G1337.canUseBlock() then return end
+    -- Diamond Zone integration: fire block via G1337.remote when inside DZ geometry
+    if G1337.settings.g1337DiamondZone and G1337.remote and G1337.canUseBlock() then
+        local c  = LocalPlayer.Character
+        local mr = c and c:FindFirstChild("HumanoidRootPart")
+        if mr then
+            for _, killer in ipairs(G1337.killersFolder:GetChildren()) do
+                if killer:IsA("Model") then
+                    local kr = killer:FindFirstChild("HumanoidRootPart")
+                    if kr then
+                        local inZone = DZ_IsInDiamond_G1337(mr.Position, kr.CFrame, kr.Position)
+                                    or DZ_IsInCircle_G1337(mr.Position, kr.Position)
+                        if inZone then
+                            local now = os.clock()
+                            G1337._dzLastFire = G1337._dzLastFire or {}
+                            if not G1337._dzLastFire[killer] or now - G1337._dzLastFire[killer] > 0.1 then
+                                G1337._dzLastFire[killer] = now
+                                pcall(function()
+                                    G1337.remote:FireServer("UseActorAbility", {"Block"})
+                                end)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    if not (G1337.settings.autoblock or G1337.settings.hd) then return end
     if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
-    for _, killerName in ipairs(G1337.killersList) do
-        local killer = G1337.killersFolder:FindFirstChild(killerName)
-        if killer then
-            local root = killer:FindFirstChild("HumanoidRootPart")
-            local head = killer:FindFirstChild("Head")
-            if root and head then
-                local dist = (myPos - root.Position).Magnitude
-                local facingOk = not G1337.settings.onlyLooking or head.CFrame.LookVector:Dot((myPos - head.Position).Unit) >= 0.5
-                if dist <= G1337.settings.sphereRange + 20 and facingOk then
-                    local los = G1337.hasLos[killerName] or G1337.hasLineOfSight(root)
-                    local inRange = G1337.inSphere[killerName] or dist <= G1337.settings.sphereRange
-                    local inCustomBox = G1337.inBox[killerName] or false
-                    local inDangerZone = (G1337.settings.sphereEsp and inRange and (not G1337.settings.wallCheck or los)) or
-                                         (G1337.settings.customEsp and inCustomBox and (not G1337.settings.wallCheck or los)) or
-                                         (not G1337.settings.sphereEsp and not G1337.settings.customEsp and inRange and (not G1337.settings.wallCheck or los))
-                    if inDangerZone then
-                        local now = os.clock()
-                        for _, sound in pairs(killer:GetDescendants()) do
-                            if sound:IsA("Sound") and sound.Playing then
-                                local id = sound.SoundId:match("%d+") or ""
-                                if killerName == "1x1x1x1" and id == G1337.special1x1Sound then
-                                    if not G1337.lastSoundTime[id] or now - G1337.lastSoundTime[id] > 1 then
-                                        G1337.lastSoundTime[id] = now
-                                        G1337.show1x1Advice(root)
-                                        task.spawn(function()
-                                            task.wait(0.65 + (G1337.settings.reactTime or 0.01))
-                                            if G1337.settings.autoblock and G1337.canUseBlock() then
-                                                G1337.remote:FireServer("UseActorAbility", {"Block"})
-                                            end
-                                            if G1337.settings.hd and G1337.canUseBlock() then G1337.doHDPull(root.Position) end
-                                        end)
-                                    end
-                                    break
-                                end
-                                if G1337.attackSoundIds[id] and (not G1337.lastSoundTime[id] or now - G1337.lastSoundTime[id] > 0.2) then
+    for _, killer in ipairs(G1337.killersFolder:GetChildren()) do
+        local killerName = killer.Name
+        local root = killer:FindFirstChild("HumanoidRootPart")
+        local head = killer:FindFirstChild("Head")
+        if root and head then
+            local dist = (myPos - root.Position).Magnitude
+            local facingOk = not G1337.settings.onlyLooking or head.CFrame.LookVector:Dot((myPos - head.Position).Unit) >= 0.4
+            if dist <= G1337.settings.sphereRange + 20 and facingOk then
+                local los = G1337.hasLos[killerName] or G1337.hasLineOfSight(root)
+                local inRange = G1337.inSphere[killerName] or dist <= G1337.settings.sphereRange
+                local inCustomBox = G1337.inBox[killerName] or false
+                local inDangerZone = (G1337.settings.sphereEsp and inRange and (not G1337.settings.wallCheck or los)) or
+                                     (G1337.settings.customEsp and inCustomBox and (not G1337.settings.wallCheck or los)) or
+                                     (not G1337.settings.sphereEsp and not G1337.settings.customEsp and inRange and (not G1337.settings.wallCheck or los))
+                if inDangerZone then
+                    local now = os.clock()
+                    for _, sound in ipairs(killer:GetDescendants()) do
+                        if sound:IsA("Sound") then
+                            local tp = sound.TimePosition
+                            local active = (sound.Playing and tp >= 0) or (tp > 0 and tp <= 0.15)
+                            if not active then continue end
+                            local id = sound.SoundId:match("%d+") or ""
+                            if killerName == "1x1x1x1" and id == G1337.special1x1Sound then
+                                if not G1337.lastSoundTime[id] or now - G1337.lastSoundTime[id] > 1 then
                                     G1337.lastSoundTime[id] = now
+                                    G1337.show1x1Advice(root)
                                     task.spawn(function()
-                                        task.wait(G1337.settings.reactTime or 0.01)
+                                        task.wait(0.65 + (G1337.settings.reactTime or 0.001))
                                         if G1337.settings.autoblock and G1337.canUseBlock() then
                                             G1337.remote:FireServer("UseActorAbility", {"Block"})
                                         end
                                         if G1337.settings.hd and G1337.canUseBlock() then G1337.doHDPull(root.Position) end
                                     end)
-                                    break
                                 end
+                                break
+                            end
+                            if G1337.attackSoundIds[id] and (not G1337.lastSoundTime[id] or now - G1337.lastSoundTime[id] > 0.08) then
+                                G1337.lastSoundTime[id] = now
+                                task.spawn(function()
+                                    task.wait(G1337.settings.reactTime or 0.001)
+                                    if G1337.settings.autoblock and G1337.canUseBlock() then
+                                        G1337.remote:FireServer("UseActorAbility", {"Block"})
+                                    end
+                                    if G1337.settings.hd and G1337.canUseBlock() then G1337.doHDPull(root.Position) end
+                                end)
+                                break
                             end
                         end
                     end
@@ -4716,27 +4777,24 @@ end
 
 RunService.Heartbeat:Connect(function() pcall(G1337.Step) end)
 
---// Sound hook: catch attack sounds the instant they play, not on next Heartbeat poll //
---// This fixes the race condition where sound.Playing is already false by the time Step runs //
+-- catch attack sounds as they start
 local G1337_soundConns = {}
 local function G1337_hookKillerSounds(killerModel)
     if not killerModel then return end
     local name = killerModel.Name
-    --// Hook all existing sounds //
     local function hookSound(sound)
         if not sound:IsA("Sound") then return end
         local conn = sound.Played:Connect(function()
             if not G1337.settings.autoblock and not G1337.settings.hd then return end
             local id = sound.SoundId:match("%d+") or ""
             local now = os.clock()
-            --// 1x1 special sound //
             if name == "1x1x1x1" and id == G1337.special1x1Sound then
                 if not G1337.lastSoundTime[id] or now - G1337.lastSoundTime[id] > 1 then
                     G1337.lastSoundTime[id] = now
                     local root = killerModel:FindFirstChild("HumanoidRootPart")
                     if root then G1337.show1x1Advice(root) end
                     task.spawn(function()
-                        task.wait(0.65 + (G1337.settings.reactTime or 0.01))
+                        task.wait(0.65 + (G1337.settings.reactTime or 0.001))
                         if G1337.settings.autoblock and G1337.canUseBlock() then
                             G1337.remote:FireServer("UseActorAbility", {"Block"})
                         end
@@ -4748,11 +4806,10 @@ local function G1337_hookKillerSounds(killerModel)
                 end
                 return
             end
-            --// Normal attack sound //
-            if G1337.attackSoundIds[id] and (not G1337.lastSoundTime[id] or now - G1337.lastSoundTime[id] > 0.2) then
+            if G1337.attackSoundIds[id] and (not G1337.lastSoundTime[id] or now - G1337.lastSoundTime[id] > 0.08) then
                 G1337.lastSoundTime[id] = now
                 task.spawn(function()
-                    task.wait(G1337.settings.reactTime or 0.01)
+                    task.wait(G1337.settings.reactTime or 0.001)
                     if G1337.settings.autoblock and G1337.canUseBlock() then
                         G1337.remote:FireServer("UseActorAbility", {"Block"})
                     end
@@ -4765,14 +4822,11 @@ local function G1337_hookKillerSounds(killerModel)
         end)
         table.insert(G1337_soundConns, conn)
     end
-    --// Hook existing sounds //
     for _, d in ipairs(killerModel:GetDescendants()) do hookSound(d) end
-    --// Hook sounds added later (some killers stream them in) //
     local dc = killerModel.DescendantAdded:Connect(hookSound)
     table.insert(G1337_soundConns, dc)
 end
 
---// Hook killers already in the folder //
 local function G1337_hookAllKillers()
     local kf = workspace:FindFirstChild("Players") and workspace.Players:FindFirstChild("Killers")
     if not kf then return end
@@ -4780,7 +4834,6 @@ local function G1337_hookAllKillers()
     kf.ChildAdded:Connect(G1337_hookKillerSounds)
 end
 
---// Run once folder is available, retry until it exists //
 task.spawn(function()
     local kf
     for _ = 1, 60 do
@@ -4791,7 +4844,7 @@ task.spawn(function()
     if kf then G1337_hookAllKillers() end
 end)
 
---// VEERONICA AUTO TRICK (from DoomSaken) //
+-- veeronica
 
 local VR = {}
 VR.behaviorFolder = nil
@@ -4865,7 +4918,7 @@ function VR.stopManager()
     VR.activeMonitors = {}
 end
 
---// ELLIOT INFINITE RUSH HOUR (from DoomSaken) //
+-- elliot rush hour
 
 local EL = {}
 EL.rushFrame = nil
@@ -4975,7 +5028,7 @@ function EL.createRushUI()
     end)
 end
 
---// ELLIOT AIMBOT (from DoomSaken) //
+-- elliot aimbot
 
 EL.trackedAnimationId = "114155003741146"
 EL.DetectionEnabled = false
@@ -5043,7 +5096,7 @@ function EL.AimAt(targetHRP)
     end
 end
 
---// TABS //
+-- tabs
 
 local function UnloadScript()
     for Key, Entry in pairs(Registry) do
@@ -5071,40 +5124,19 @@ local TabKiller    = Window:Tab({ Title = "Killer",     Icon = "skull" })
 local TabTwoTime   = Window:Tab({ Title = "Two Time",   Icon = "sword" })
 local TabExtra     = Window:Tab({ Title = "Extra",      Icon = "zap" })
 
---// Auto Block (Original FluxSaken — QueryHitbox / Sound / Anim based) //
 AddSection(TabAutoBlock, "Original Auto Block")
 AddToggle(TabAutoBlock, "AutoBlock", "Auto Block", false, function(v)
     SetAutoBlock(v)
+    task.defer(function()
+        if FourthBlock and FourthBlock.applyTint then pcall(FourthBlock.applyTint) end
+    end)
+end)
+-- on = button shows up, tapping it flips auto block above
+AddToggle(TabAutoBlock, "AutoBlockButton", "Auto Block Button (on-screen)", false, function(v)
     if v then
         StartFourthButton()
-        --// tint green once button is live //
-        task.defer(function()
-            if FourthBlock and FourthBlock.applyTint then FourthBlock.applyTint() end
-        end)
     else
-        --// tint red first so button shows as off, then stop //
-        if FourthBlock and FourthBlock.applyTint then
-            pcall(FourthBlock.applyTint)
-        end
-        --// Keep the button visible but visually off (red); only fully stop after a frame //
-        task.defer(function()
-            StopFourthButton()
-            --// If the button instance still exists after stop, force red tint //
-            if FourthBlock and FourthBlock.instance and FourthBlock.instance.Parent then
-                local b = FourthBlock.instance
-                local redCol = Color3.fromRGB(255, 0, 0)
-                pcall(function()
-                    if b:IsA("ImageButton") or b:IsA("ImageLabel") then b.ImageColor3 = redCol end
-                    for _, d in ipairs(b:GetDescendants()) do
-                        if d:IsA("ImageLabel") or d:IsA("ImageButton") then
-                            d.ImageColor3 = redCol
-                        elseif d:IsA("Frame") and d.BackgroundTransparency < 1 then
-                            d.BackgroundColor3 = redCol
-                        end
-                    end
-                end)
-            end
-        end)
+        StopFourthButton()
     end
 end)
 AddToggle(TabAutoBlock, "StrictVisualCheck", "Strict Visual Check (Beam)", false)
@@ -5112,16 +5144,53 @@ AddToggle(TabAutoBlock, "HitboxDrag",        "Hitbox Drag",                false
 AddSlider(TabAutoBlock, "HitboxDragRange",   "Drag Range (studs)",   5,  60,  30,  1)
 AddSlider(TabAutoBlock, "DragSpeed",         "Drag Speed",           1,  40,  14,  1)
 AddSlider(TabAutoBlock, "BlockDelay",        "Block Delay (ms)",     0,  200, 0,   1)
+
+AddSection(TabAutoBlock, "Diamond Zone Auto Block")
+AddToggle(TabAutoBlock, "DiamondZoneAB", "Diamond Zone Auto Block", false, function(v)
+    State.DiamondZoneAB = v
+    pcall(UpdateDiamondZoneVisibility)
+end)
+AddToggle(TabAutoBlock, "DZ_ShowDiamond", "Show Diamond Zone", false, function(v)
+    State.DZ_ShowDiamond = v
+    pcall(UpdateDiamondZoneVisibility)
+end)
+AddToggle(TabAutoBlock, "DZ_ShowCircle", "Show Circle Zone", false, function(v)
+    State.DZ_ShowCircle = v
+    pcall(UpdateDiamondZoneVisibility)
+end)
+AddSlider(TabAutoBlock, "DZ_DiamondLength", "Diamond Length",  1,  20, 8,   0.5, function(v) State.DZ_DiamondLength = v end)
+AddSlider(TabAutoBlock, "DZ_DiamondWidth",  "Diamond Width",   1,  15, 4,   0.5, function(v) State.DZ_DiamondWidth  = v end)
+AddSlider(TabAutoBlock, "DZ_DiamondOffset", "Diamond Offset",  0,  10, 3,   0.5, function(v) State.DZ_DiamondOffset = v end)
+AddSlider(TabAutoBlock, "DZ_CircleRadius",  "Circle Radius",   1,  20, 5,   0.5, function(v) State.DZ_CircleRadius  = v end)
+
 AddSection(TabAutoBlock, "Punch (Original)")
 AddToggle(TabAutoBlock, "PunchAimbot", "Punch Aimbot (Two-Time)", false)
 AddToggle(TabAutoBlock, "AutoPunch",   "Auto Punch Counter",       false)
 
---// Auto Block (Guest 1337 Features) //
 AddSection(TabAutoBlock, "Auto Block Alt (G1337)")
 AddToggle(TabAutoBlock, "G1337_AutoBlock", "Autoblock", false, function(v) G1337.settings.autoblock = v end)
+AddSection(TabAutoBlock, "Diamond Zone (Alt Block)")
+AddToggle(TabAutoBlock, "G1337_DiamondZoneAB", "Diamond Zone Auto Block", false, function(v)
+    G1337.settings.g1337DiamondZone = v
+    -- start/stop the DZ visual engine so the zone renders when this is on
+    State.DiamondZoneAB = v
+    pcall(UpdateDiamondZoneVisibility)
+end)
+AddToggle(TabAutoBlock, "G1337_DZ_ShowDiamond", "Show Diamond Zone", false, function(v)
+    State.DZ_ShowDiamond = v
+    pcall(UpdateDiamondZoneVisibility)
+end)
+AddToggle(TabAutoBlock, "G1337_DZ_ShowCircle", "Show Circle Zone", false, function(v)
+    State.DZ_ShowCircle = v
+    pcall(UpdateDiamondZoneVisibility)
+end)
+AddSlider(TabAutoBlock, "G1337_DZ_DiamondLength", "Diamond Length",  1,  20, 8,   0.5, function(v) State.DZ_DiamondLength = v end)
+AddSlider(TabAutoBlock, "G1337_DZ_DiamondWidth",  "Diamond Width",   1,  15, 4,   0.5, function(v) State.DZ_DiamondWidth  = v end)
+AddSlider(TabAutoBlock, "G1337_DZ_DiamondOffset", "Diamond Offset",  0,  10, 3,   0.5, function(v) State.DZ_DiamondOffset = v end)
+AddSlider(TabAutoBlock, "G1337_DZ_CircleRadius",  "Circle Radius",   1,  20, 5,   0.5, function(v) State.DZ_CircleRadius  = v end)
 AddToggle(TabAutoBlock, "G1337_OnlyLooking", "Only When Looking", true, function(v) G1337.settings.onlyLooking = v end)
 AddToggle(TabAutoBlock, "G1337_WallCheck", "Wall Check", true, function(v) G1337.settings.wallCheck = v end)
-AddSlider(TabAutoBlock, "G1337_ReactTime", "React Time (s)", 0.001, 0.5, 0.01, 0.001, function(v) G1337.settings.reactTime = v end)
+AddSlider(TabAutoBlock, "G1337_ReactTime", "React Time (s)", 0.001, 0.5, 0.001, 0.001, function(v) G1337.settings.reactTime = v end)
 AddSection(TabAutoBlock, "Auto Punch Settings")
 AddToggle(TabAutoBlock, "G1337_PunchAimbot", "Punch Aimbot (Locks on Killer)", true, function(v) getgenv().PunchAimbot.Enabled = v end)
 AddDropdown(TabAutoBlock, "G1337_AimMode", "Aim Mode", {"Camera (Smooth)", "RootPart (Instant)"}, "Camera (Smooth)", function(o)
@@ -5150,7 +5219,6 @@ end)
 AddSlider(TabAutoBlock, "G1337_BoxLength", "Length (studs)", 1, 50, 15, 1, function(v) G1337.settings.boxLength = v end)
 AddSlider(TabAutoBlock, "G1337_BoxWidth", "Width (studs)", 1, 50, 6, 1, function(v) G1337.settings.boxWidth = v end)
 
---// Veeronica //
 AddSection(TabVeeronica, "Veeronica Scripts")
 AddToggle(TabVeeronica, "VR_AutoTrick", "Auto Trick", false, function(v)
     VR.enabled = v
@@ -5160,7 +5228,6 @@ AddButton(TabVeeronica, "Skate Controller", function()
     loadstring(game:HttpGet("https://pastebin.com/raw/MzKS5uvm"))()
 end)
 
---// Elliot //
 AddSection(TabElliot, "Elliot - Infinite Rush Hour")
 AddSlider(TabElliot, "EL_CooldownTime", "Rush Hour Cooldown (s)", 1, 30, 6, 1, function(v) EL.cooldownTime = v end)
 AddToggle(TabElliot, "EL_EnableRush", "Enable Infinite Rush Hour", false, function(v)
@@ -5193,7 +5260,6 @@ AddToggle(TabElliot, "EL_AimbotEnabled", "Elliot Aimbot V1.1", false, function(v
     end
 end)
 
---// Misc //
 AddSection(TabMisc, "Quality of Life")
 AddToggle(TabMisc, "AutoPickup", "Auto Pickup Items", false)
 AddToggle(TabMisc, "AutoEscape", "Auto Escape (Nosferatu hook)", false)
@@ -5221,7 +5287,6 @@ AddInput(TabMisc, "ConfigLoad", "Load Config ID", "", function(Text)
     else Notify("Config", "Invalid config ID", 3) end
 end)
 
---// Visual //
 AddSection(TabVisual, "Lighting")
 AddToggle(TabVisual, "Fullbright", "Fullbright", false, SetFullbright)
 AddToggle(TabVisual, "NoShadows", "No Shadows", false, Feature.SetNoShadows)
@@ -5242,7 +5307,6 @@ AddDropdown(TabVisual, "EmoteSelect", "Emote", Feature.EmoteNames, Feature.Emote
 AddButton(TabVisual, "Play Emote", Feature.PlayEmote)
 AddButton(TabVisual, "Stop Emote", Feature.StopEmote)
 
---// Movement //
 AddSection(TabMovement, "Speed")
 AddToggle(TabMovement, "SpeedBoost", "Speed Boost", false, SetSpeedBoost)
 AddSlider(TabMovement, "SpeedValue", "Speed Extra (studs/s)", 0, 60, 10, 1)
@@ -5262,7 +5326,6 @@ AddSlider(TabMovement, "StaminaLossValue", "Stamina Loss", 1, 50, 10, 1)
 AddToggle(TabMovement, "ModifySprintSpeed", "Modify Sprint Speed", false, Feature.StaminaToggle("SprintSpeed"))
 AddSlider(TabMovement, "SprintSpeedValue", "Sprint Speed", 10, 50, 22, 1)
 
---// Survivor //
 AddSection(TabSurvivor, "Generator")
 AddToggle(TabSurvivor, "AutoGeneratorMinigame", "Auto Generator", false, function(enabled)
     MinigameSolver.ManualEnabled = enabled
@@ -5304,7 +5367,6 @@ AddToggle(TabSurvivor, "ChanceAntiBait", "Anti-Bait Speed Cap", true)
 AddToggle(TabSurvivor, "ChanceCoinFlip", "Auto Coin Flip (away from killers)", false, Feature.SetChanceCoinFlip)
 SA.AddUI(TabSurvivor, SA.Dusekkar, "Dusekkar", "Dusekkar")
 
---// Jane Doe //
 AddSection(TabSurvivor, "Jane Doe — Crystal Auto-Fire")
 AddToggle(TabSurvivor, "JD_Enabled", "Enable Jane Doe Aimbot", false, function(On) Feature.JD_SetEnabled(On) end)
 AddToggle(TabSurvivor, "JD_SilentAim", "Aimbot (Silent Aim)", false, function(On) Feature.JD_SetAimbot(On) end)
@@ -5328,25 +5390,20 @@ AddSlider(TabSurvivor, "JD_AxeLockDur", "Lock Duration (s)", 0.5, 3, 1.7, 0.1, f
 AddSection(TabSurvivor, "Jane Doe — Control")
 AddButton(TabSurvivor, "Unload Jane Doe", function() Feature.JD_Unload() end)
 
---// Killer Tab //
-
 AddSection(TabKiller, "Nova Silent Aim")
 SA.AddUI(TabKiller, SA.Nova, "Nova", "Nova")
 
 AddSection(TabKiller, "c00lkidd")
 AddToggle(TabKiller, "DashTurn", "Dash Turn Fix (c00lkidd)", false, Feature.SetDashTurn)
 
-
 AddSection(TabKiller, "Veeronica (Killer Side)")
-
 
 AddSection(TabKiller, "Azure QTE (Killer)")
 AddToggle(TabKiller, "AutoDisarmKiller", "Auto Disarm Azure QTE", false, SetAutoDisarm)
 
---// Two Time Tab //
-
--- ===== Auto Backstab (TP) State =====
-local ABTP = {
+local ABTP
+do
+ABTP = {
     enabled         = false,
     daggerEnabled   = false,
     predEnabled     = false,
@@ -5368,7 +5425,6 @@ local ABTP = {
     killerTrack     = {},
 }
 
--- killerTrack heartbeat (separate from BS tracker)
 RunService.Heartbeat:Connect(function(dt)
     local kf = workspace:FindFirstChild("Players") and workspace.Players:FindFirstChild("Killers")
     if not kf then return end
@@ -5553,7 +5609,6 @@ local function ABTP_activateForKiller(killerModel, duration)
     end
 end
 
--- Main watcher loop
 task.spawn(function()
     while true do
         task.wait(ABTP.checkInterval)
@@ -5600,7 +5655,7 @@ task.spawn(function()
         end
     end
 end)
--- ===== End Auto Backstab (TP) =====
+end -- scope
 
 AddSection(TabTwoTime, "Auto Backstab (TP)")
 AddToggle(TabTwoTime, "ABTP_Enabled",      "Enable Auto Backstab (TP)",     false, function(v) ABTP.enabled       = v end)
@@ -5636,8 +5691,6 @@ AddSection(TabTwoTime, "Auto Studs")
 AddSlider(TabTwoTime, "BS_AutoStandStuds", "Stand Studs",        1,   12,  5.5,  0.1,  function(v) BS.autoStandStuds   = v end)
 AddSlider(TabTwoTime, "BS_AutoRunStuds",   "Run Studs",          1,   8,   3.4,  0.1,  function(v) BS.autoRunStuds     = v end)
 
---// Extra Tab //
-
 AddSection(TabExtra, "Sk8 / Spray")
 AddToggle(TabExtra, "Sk8Control",  "Sk8 Control Override",   false, function(v) State.Sk8Control = v end)
 AddToggle(TabExtra, "FastSpray",   "Fast Spray (Back & Forth)", false, function(v) State.FastSpray = v end)
@@ -5663,184 +5716,6 @@ AddToggle(TabExtra, "AutoGen2", "Auto Generator (Mirror)", false, function(enabl
     MinigameSolver.Generation += 1
     if enabled then pcall(installMinigameHooks) end
 end)
-
---// Shedletsky Tab //
-
-local TabShedletsky = Window:Tab({ Title = "Shedletsky", Icon = "sword" })
-
-local Shed = {
-    enabled   = false,
-    dist      = 10,
-    lastFire  = {},   -- [killerModel] = os.clock()
-    fireCd    = 1.1,  -- per-killer fire cooldown (seconds)
-    loopConn  = nil,
-    rotConn   = nil,
-    charAdd   = nil,
-    charRem   = nil,
-}
-
--- Get the Slash ability button from the in-game UI
-local function ShedGetSlashBtn()
-    local pg = LocalPlayer:FindFirstChild("PlayerGui"); if not pg then return nil end
-    local ui = pg:FindFirstChild("MainUI");             if not ui then return nil end
-    local ac = ui:FindFirstChild("AbilityContainer");   if not ac then return nil end
-    return ac:FindFirstChild("Slash")
-end
-
--- Read the cooldown value from the button (matches ABTP_readCD pattern)
-local function ShedReadCD(btn)
-    if not btn then return nil end
-    local cdObj = btn:FindFirstChild("CooldownTime") or btn:FindFirstChild("Cooldown")
-        or btn:FindFirstChildWhichIsA("NumberValue")  or btn:FindFirstChildWhichIsA("StringValue")
-        or btn:FindFirstChild("CooldownLabel")        or btn:FindFirstChild("Timer")
-        or btn:FindFirstChild("CD")
-    if not cdObj then return nil end
-    if cdObj:IsA("NumberValue") then return cdObj.Value end
-    if cdObj:IsA("StringValue") then return tonumber(cdObj.Value) end
-    if cdObj:IsA("TextLabel")   then return tonumber(cdObj.Text) end
-    if cdObj.Value ~= nil then
-        if type(cdObj.Value) == "number" then return cdObj.Value end
-        return tonumber(cdObj.Value)
-    end
-    if cdObj.Text ~= nil then return tonumber(cdObj.Text) end
-    return nil
-end
-
--- Returns true when Slash can be fired (no active cooldown)
-local function ShedSlashReady()
-    local btn = ShedGetSlashBtn()
-    if not btn then return true end   -- no UI = not Shedletsky yet or lobby, let loop idle
-    local cd = ShedReadCD(btn)
-    return cd == nil or cd <= 0
-end
-
--- Face LocalRoot toward a killer's root
-local function ShedFaceKiller(killerRoot)
-    if not LocalRoot or not killerRoot then return end
-    pcall(function()
-        local dir  = killerRoot.Position - LocalRoot.Position
-        local flat = Vector3.new(dir.X, 0, dir.Z)
-        if flat.Magnitude < 0.01 then return end
-        LocalRoot.CFrame = CFrame.new(LocalRoot.Position, LocalRoot.Position + flat.Unit)
-    end)
-end
-
--- Smooth rotation lock onto nearest killer (runs for ~1 s then stops)
-local function ShedStartRot()
-    if Shed.rotConn then Shed.rotConn:Disconnect(); Shed.rotConn = nil end
-    Shed.rotConn = RunService.Heartbeat:Connect(function()
-        if not Shed.enabled or not LocalRoot then
-            Shed.rotConn:Disconnect(); Shed.rotConn = nil; return
-        end
-        RefreshFolders()
-        if not KillersFolder then return end
-        local best, bestD = nil, math.huge
-        for _, m in pairs(KillersFolder:GetChildren()) do
-            local r = m:FindFirstChild("HumanoidRootPart")
-            if r then
-                local d = (r.Position - LocalRoot.Position).Magnitude
-                if d < bestD then best = r; bestD = d end
-            end
-        end
-        if not best then return end
-        pcall(function()
-            local dir  = best.Position - LocalRoot.Position
-            local flat = Vector3.new(dir.X, 0, dir.Z)
-            if flat.Magnitude < 0.01 then return end
-            local goal = CFrame.new(LocalRoot.Position, LocalRoot.Position + flat.Unit)
-            LocalRoot.CFrame = LocalRoot.CFrame:Lerp(goal, 0.35)
-        end)
-    end)
-    task.delay(1.2, function()
-        if Shed.rotConn then Shed.rotConn:Disconnect(); Shed.rotConn = nil end
-    end)
-end
-
--- Fire slash toward a specific killer
-local function ShedFireSlash(killerModel)
-    local root = killerModel and killerModel:FindFirstChild("HumanoidRootPart")
-    ShedFaceKiller(root)
-    FireAbility("Slash")
-    ShedStartRot()
-end
-
--- Stop the main loop cleanly (safe to call from inside the heartbeat via task.defer)
-local function ShedStopLoop()
-    if Shed.loopConn then
-        Shed.loopConn:Disconnect()
-        Shed.loopConn = nil
-    end
-    for k in pairs(Shed.lastFire) do Shed.lastFire[k] = nil end
-end
-
--- Main heartbeat loop — scans ALL killers in range and slashes each independently
-local function ShedStartLoop()
-    if Shed.loopConn then return end
-    Shed.loopConn = RunService.Heartbeat:Connect(function()
-        if not Shed.enabled then
-            task.defer(ShedStopLoop); return
-        end
-        if not LocalRoot then return end
-
-        RefreshFolders()
-        if not KillersFolder then return end
-        if not ShedSlashReady() then return end
-
-        local now = os.clock()
-        for _, v in pairs(KillersFolder:GetChildren()) do
-            if v:IsA("Model") then
-                local kroot = v:FindFirstChild("HumanoidRootPart")
-                if kroot then
-                    local dist = (kroot.Position - LocalRoot.Position).Magnitude
-                    if dist <= Shed.dist then
-                        local last = Shed.lastFire[v] or 0
-                        if now - last >= Shed.fireCd then
-                            Shed.lastFire[v] = now
-                            task.spawn(ShedFireSlash, v)
-                        end
-                    end
-                end
-            end
-        end
-    end)
-end
-
--- Toggle handler: wires up CharacterAdded so the loop restarts on each Shedletsky spawn
-local function ShedToggle()
-    if Shed.charAdd then Shed.charAdd:Disconnect(); Shed.charAdd = nil end
-    if Shed.charRem then Shed.charRem:Disconnect(); Shed.charRem = nil end
-    ShedStopLoop()
-    if Shed.rotConn then Shed.rotConn:Disconnect(); Shed.rotConn = nil end
-
-    if not Shed.enabled then return end
-
-    -- start immediately if already spawned as Shedletsky
-    if LocalCharacter and LocalCharacter.Name == "Shedletsky" then
-        ShedStartLoop()
-    end
-
-    Shed.charAdd = LocalPlayer.CharacterAdded:Connect(function(newChar)
-        task.wait(1.5)
-        if newChar.Name ~= "Shedletsky" then return end
-        ShedStopLoop()
-        ShedStartLoop()
-    end)
-
-    Shed.charRem = LocalPlayer.CharacterRemoving:Connect(function()
-        ShedStopLoop()
-    end)
-end
-
-AddSection(TabShedletsky, "Auto Slash")
-AddToggle(TabShedletsky, "ShedAutoSlash", "Auto Slash", false, function(v)
-    Shed.enabled = v
-    ShedToggle()
-end)
-AddSlider(TabShedletsky, "ShedAutoSlashDist", "Slash Distance (studs)", 1, 20, 10, 1, function(v)
-    Shed.dist = v
-end)
-
---// Freeze Hitbox Tab //
 
 local TabFreezeHitbox = Window:Tab({ Title = "Freeze Hitbox", Icon = "crosshair" })
 
@@ -5891,7 +5766,6 @@ do
     local function StopFreezeHitbox()
         FH.Running = false
         FH.Token  += 1
-        -- Restore PrimaryPart if still set to our part
         pcall(function()
             local char = LocalPlayer.Character
             if not char then return end
@@ -5938,14 +5812,12 @@ do
         end)
     end)
 
-    -- Clean up on character removal
     LocalPlayer.CharacterRemoving:Connect(StopFreezeHitbox)
     table.insert(CharacterCallbacks, function()
         if State.FreezeHitboxEnabled then RunFreezeHitbox() end
     end)
 end
 
---// Info //
 local TabInfo = Window:Tab({ Title = "Info", Icon = "info" })
 
 AddSection(TabInfo, "Credits")
@@ -5965,8 +5837,6 @@ AddButton(TabInfo, "Copy Discord Link", function()
         Notify("Discord", "Could not copy — executor may not support clipboard", 3)
     end
 end)
-
---// BOOTSTRAP CHARACTER //
 
 if LocalPlayer.Character then task.spawn(OnCharacter, LocalPlayer.Character) end
 
