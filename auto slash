@@ -5413,219 +5413,137 @@ AddButton(TabSurvivor, "Unload Jane Doe", function() Feature.JD_Unload() end)
 -- ============================================================
 local JDSpikeAimbot = {}
 do
-    local _Settings = {
-        Enabled = false,
-        VelocitySmoothFactor = 0.15,
-        AimSmoothnessMoving = 0.05,
-        AimSmoothnessStop = 0.8,
-        CorruptLeadTime = 0.5,
-        WindupTime = 2.0,
-    }
+    -- State (mirrors original: enabled flag, locked target, active highlight)
+    local _Enabled  = false
+    local _Target   = nil  -- Player instance
+    local _Highlight= nil  -- Highlight instance on target's character
+    local _HeartbeatConn = nil
 
-    local _State = {
-        HooksInstalled = false,
-        CurrentTarget = nil,
-        AimEndTime = 0,
-        LastTriggerTime = 0,
-        VelocityTable = {},
-        AimRenderConnection = nil,
-        AimHeartbeatConnection = nil,
-        AnimConnection = nil,
-        CharAddedConnection = nil,
-        CorruptAnimIds = {},
-    }
-
-    local function _GetSurvivorsFolder()
-        local pf = workspace:FindFirstChild("Players")
-        return pf and pf:FindFirstChild("Survivors")
-    end
-
-    local function _IsMovingAnalog()
-        local char = LocalPlayer.Character
-        if not char then return false end
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        return hum and hum.MoveDirection.Magnitude > 0.1 or false
-    end
-
-    local function _UpdateVelocities(dt)
-        local survivors = _GetSurvivorsFolder()
-        if not survivors then return end
-        local active = {}
-        for _, child in ipairs(survivors:GetChildren()) do
-            local hrp = child:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                active[child] = true
-                local vt = _State.VelocityTable
-                local cp = hrp.Position
-                if not vt[child] or vt[child].Root ~= hrp then
-                    vt[child] = { Root = hrp, LastPos = cp, SmoothedVel = Vector3.zero }
-                else
-                    local d = vt[child]
-                    local rv = (cp - d.LastPos) / math.max(dt, 0.001)
-                    d.LastPos = cp
-                    d.SmoothedVel = d.SmoothedVel:Lerp(rv, _Settings.VelocitySmoothFactor)
-                end
+    -- Remove any FlexSaken-owned highlight from a player's character
+    local function _RemoveHighlight(player)
+        if not player then return end
+        local char = player.Character
+        if not char then return end
+        for _, child in ipairs(char:GetChildren()) do
+            if child:IsA("Highlight") and child.Name == "JDSpikeHL" then
+                child:Destroy()
             end
         end
-        for model in pairs(_State.VelocityTable) do
-            if not active[model] then _State.VelocityTable[model] = nil end
-        end
     end
 
-    local function _GetPredicted(target)
-        local hrp = target and target:FindFirstChild("HumanoidRootPart")
-        if not hrp then return Vector3.zero end
-        local data = _State.VelocityTable[target]
-        local sv = data and data.SmoothedVel or hrp.AssemblyLinearVelocity
-        if sv.Magnitude > 120 then sv = Vector3.zero end
-        local flat = Vector3.new(sv.X, 0, sv.Z)
-        return hrp.Position + flat * _Settings.CorruptLeadTime
+    -- Add a red highlight to a player's character, returns the Highlight instance
+    local function _AddHighlight(player)
+        if not player then return nil end
+        local char = player.Character
+        if not char then return nil end
+        _RemoveHighlight(player)
+        local hl = Instance.new("Highlight")
+        hl.Name             = "JDSpikeHL"
+        hl.Adornee          = char
+        hl.FillColor        = Color3.fromRGB(255, 0, 0)
+        hl.OutlineColor     = Color3.fromRGB(0, 0, 0)
+        hl.FillTransparency = 0.5
+        hl.OutlineTransparency = 0
+        hl.Parent           = char
+        return hl
     end
 
-    local function _StopAiming()
-        if _State.AimRenderConnection then _State.AimRenderConnection:Disconnect(); _State.AimRenderConnection = nil end
-        if _State.AimHeartbeatConnection then _State.AimHeartbeatConnection:Disconnect(); _State.AimHeartbeatConnection = nil end
-        _State.CurrentTarget = nil
-    end
-
-    local function _FindBest()
-        local survivors = _GetSurvivorsFolder()
-        if not survivors then return nil end
+    -- Find the nearest enemy player by closest screen-center distance
+    -- (targets all Players, matching the source script's intent)
+    local function _FindNearest()
+        local guiService = game:GetService("GuiService")
+        local res = guiService:GetScreenResolution()
+        local screenCenter = Vector2.new(res.X / 2, res.Y / 2)
+        local camera = workspace.CurrentCamera
         local best, bestDist = nil, math.huge
-        local char = LocalPlayer.Character
-        local myHrp = char and char:FindFirstChild("HumanoidRootPart")
-        if not myHrp then return nil end
-        for _, s in ipairs(survivors:GetChildren()) do
-            local sh = s:FindFirstChild("HumanoidRootPart")
-            local hum = s:FindFirstChildOfClass("Humanoid")
-            if sh and hum and hum.Health > 0 then
-                local d = (sh.Position - myHrp.Position).Magnitude
-                if d < bestDist then bestDist = d; best = s end
-            end
-        end
-        return best
-    end
 
-    local function _AimStep()
-        if not _Settings.Enabled or os.clock() > _State.AimEndTime then _StopAiming(); return end
-        if not _State.CurrentTarget or not _State.CurrentTarget:FindFirstChild("HumanoidRootPart") then
-            _State.CurrentTarget = _FindBest()
-            if not _State.CurrentTarget then _StopAiming(); return end
-        end
-        local th = _State.CurrentTarget:FindFirstChildOfClass("Humanoid")
-        if th and th.Health <= 0 then
-            _State.CurrentTarget = _FindBest()
-            if not _State.CurrentTarget then _StopAiming(); return end
-        end
-        local tp = _GetPredicted(_State.CurrentTarget)
-        if tp == Vector3.zero then return end
-        local char = LocalPlayer.Character
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        if not hrp then return end
-        local sm = _IsMovingAnalog() and _Settings.AimSmoothnessMoving or _Settings.AimSmoothnessStop
-        local lp = Vector3.new(tp.X, hrp.Position.Y, tp.Z)
-        if (lp - hrp.Position).Magnitude > 0.01 then
-            hrp.CFrame = hrp.CFrame:Lerp(CFrame.lookAt(hrp.Position, lp), sm)
-        end
-    end
-
-    local function _Trigger()
-        if not _Settings.Enabled then return end
-        local now = os.clock()
-        if now - _State.LastTriggerTime < 0.5 then return end
-        local target = _FindBest()
-        if not target then return end
-        _StopAiming()
-        _State.LastTriggerTime = now
-        _State.CurrentTarget = target
-        _State.AimEndTime = now + _Settings.WindupTime + 1.5
-        _State.AimRenderConnection = RunService.RenderStepped:Connect(_AimStep)
-        _State.AimHeartbeatConnection = RunService.Heartbeat:Connect(_AimStep)
-    end
-
-    local function _CollectAnims()
-        table.clear(_State.CorruptAnimIds)
-        local function extract(mod)
-            local ok, cfg = pcall(require, mod)
-            if ok and type(cfg) == "table" and cfg.Animations then
-                for name, animId in pairs(cfg.Animations) do
-                    if type(animId) == "string" and string.find(string.lower(name), "corrupt") then
-                        table.insert(_State.CorruptAnimIds, animId)
-                    elseif type(animId) == "table" then
-                        for _, sub in pairs(animId) do
-                            if type(sub) == "string" and string.find(string.lower(name), "corrupt") then
-                                table.insert(_State.CorruptAnimIds, sub)
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer then
+                local char = player.Character
+                if char then
+                    local hrp = char:FindFirstChild("HumanoidRootPart")
+                    local hum = char:FindFirstChildOfClass("Humanoid")
+                    if hrp and hum and hum.Health > 0 then
+                        local screenPos, onScreen = camera:WorldToViewportPoint(hrp.Position)
+                        if onScreen then
+                            local dist = (screenCenter - Vector2.new(screenPos.X, screenPos.Y)).Magnitude
+                            if dist < bestDist then
+                                bestDist = dist
+                                best = player
                             end
                         end
                     end
                 end
             end
         end
-        pcall(function()
-            local jd = ReplicatedStorage.Assets.Killers:FindFirstChild("JohnDoe")
-            if jd and jd:FindFirstChild("Config") then extract(jd.Config) end
-            local skins = ReplicatedStorage.Assets:FindFirstChild("Skins")
-                and ReplicatedStorage.Assets.Skins:FindFirstChild("Killers")
-                and ReplicatedStorage.Assets.Skins.Killers:FindFirstChild("JohnDoe")
-            if skins then
-                for _, skin in ipairs(skins:GetChildren()) do
-                    if skin:FindFirstChild("Config") then extract(skin.Config) end
-                end
-            end
-        end)
+        return best
     end
 
-    local function _HookCharAnims(char)
-        if _State.AnimConnection then _State.AnimConnection:Disconnect(); _State.AnimConnection = nil end
-        local hum = char and char:WaitForChild("Humanoid", 5)
-        if not hum then return end
-        local animator = hum:FindFirstChildOfClass("Animator") or hum
-        _State.AnimConnection = animator.AnimationPlayed:Connect(function(track)
-            local anim = track.Animation
-            if anim and table.find(_State.CorruptAnimIds, anim.AnimationId) then
-                _Trigger()
-            end
-        end)
+    -- Stop aiming and clean up
+    local function _StopAiming()
+        if _HeartbeatConn then
+            _HeartbeatConn:Disconnect()
+            _HeartbeatConn = nil
+        end
+        if _Target then
+            pcall(_RemoveHighlight, _Target)
+            _Target = nil
+        end
+        _Highlight = nil
     end
 
-    local function _Install()
-        if _State.HooksInstalled then return end
-        _CollectAnims()
-        pcall(function()
-            local bm = require(ReplicatedStorage.Assets.Killers.JohnDoe.Behavior)
-            if bm and bm.Abilities and bm.Abilities.CorruptEnergy then
-                local at = bm.Abilities.CorruptEnergy
-                local orig = at.Callback
-                if type(orig) == "function" then
-                    at.Callback = function(...)
-                        task.spawn(_Trigger)
-                        return orig(...)
-                    end
-                end
-            end
-        end)
-        if LocalPlayer.Character then task.spawn(_HookCharAnims, LocalPlayer.Character) end
-        _State.CharAddedConnection = LocalPlayer.CharacterAdded:Connect(function(newChar)
-            _StopAiming()
-            _CollectAnims()
-            _HookCharAnims(newChar)
-        end)
-        _State.HooksInstalled = true
-    end
+    -- Start aiming at the nearest target
+    local function _StartAiming()
+        _StopAiming()
+        local target = _FindNearest()
+        if not target then return end
 
-    RunService.Heartbeat:Connect(function(dt)
-        if _Settings.Enabled then _UpdateVelocities(dt) end
-    end)
+        _Target    = target
+        _Highlight = _AddHighlight(target)
+
+        -- Heartbeat: rotate camera toward target HRP with velocity prediction
+        _HeartbeatConn = RunService.Heartbeat:Connect(function()
+            if not _Enabled then _StopAiming(); return end
+
+            local char = _Target and _Target.Character
+            local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+            if not hrp then
+                -- Target lost — try to reacquire
+                _StopAiming()
+                _StartAiming()
+                return
+            end
+
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if hum and hum.Health <= 0 then
+                _StopAiming()
+                _StartAiming()
+                return
+            end
+
+            local cam = workspace.CurrentCamera
+            -- Velocity prediction factor matches the source script (0.1768521)
+            cam.CFrame = CFrame.new(cam.CFrame.Position, hrp.Position + hrp.Velocity * 0.1768521)
+        end)
+    end
 
     -- Public interface for the UI toggle
     function JDSpikeAimbot.SetEnabled(v)
-        _Settings.Enabled = v
+        _Enabled = v
         if v then
-            _Install()
+            _StartAiming()
         else
             _StopAiming()
         end
     end
+
+    -- Re-acquire target if the locked player's character respawns
+    LocalPlayer.CharacterAdded:Connect(function()
+        if _Enabled then
+            task.wait(1)
+            _StartAiming()
+        end
+    end)
 end
 -- ============================================================
 
