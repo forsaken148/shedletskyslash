@@ -1240,11 +1240,88 @@ local function DZ_UpdateZone(z, kr, mr)
     if z.circle and z.circle.Parent then z.circle.Color = inC and rc or nc end
 end
 
+-- Per-killer sound connections for DZ sound-driven blocking
+local DZ_SoundConns = {}
+
+local function DZ_HookKillerSounds(k)
+    -- Disconnect any existing hooks for this killer first
+    if DZ_SoundConns[k] then
+        for _, c in ipairs(DZ_SoundConns[k]) do pcall(function() c:Disconnect() end) end
+    end
+    DZ_SoundConns[k] = {}
+
+    local kr = k:FindFirstChild("HumanoidRootPart")
+    local lastFire = 0
+
+    local function onSoundPlayed(sound)
+        -- Only fire if either DZ feature is active
+        if not (State.DiamondZoneAB or (G1337 and G1337.settings and G1337.settings.g1337DiamondZone)) then return end
+        if DZ_IsPlayerKiller() then return end
+
+        local id = tostring(sound.SoundId):match("%d+") or ""
+        if not AttackSounds["rbxassetid://" .. id] then return end
+
+        -- Check if the player is inside the diamond zone for this killer
+        if not DZ_IsInZone(k) then return end
+
+        local now = os.clock()
+        if now - lastFire < 0.1 then return end
+        lastFire = now
+
+        local currentKr = k:FindFirstChild("HumanoidRootPart")
+        if State.DiamondZoneAB then
+            pcall(DoBlock, currentKr)
+        end
+        if G1337 and G1337.settings and G1337.settings.g1337DiamondZone and G1337.remote and G1337.canUseBlock() then
+            pcall(function() G1337.remote:FireServer("UseActorAbility", {"Block"}) end)
+        end
+    end
+
+    local function hookSound(sound)
+        if not sound:IsA("Sound") then return end
+        local conn = sound.Played:Connect(function() onSoundPlayed(sound) end)
+        table.insert(DZ_SoundConns[k], conn)
+    end
+
+    for _, d in ipairs(k:GetDescendants()) do hookSound(d) end
+    local dc = k.DescendantAdded:Connect(function(d) hookSound(d) end)
+    table.insert(DZ_SoundConns[k], dc)
+    local ac = k.AncestryChanged:Connect(function(_, parent)
+        if not parent then
+            if DZ_SoundConns[k] then
+                for _, c in ipairs(DZ_SoundConns[k]) do pcall(function() c:Disconnect() end) end
+                DZ_SoundConns[k] = nil
+            end
+        end
+    end)
+    table.insert(DZ_SoundConns[k], ac)
+end
+
+local function DZ_UnhookAllSounds()
+    for k, conns in pairs(DZ_SoundConns) do
+        for _, c in ipairs(conns) do pcall(function() c:Disconnect() end) end
+    end
+    table.clear(DZ_SoundConns)
+end
+
 local function DZ_Start()
     if DZ.running then return end
     DZ.running = true; DZ.connections = {}; DZ.killerZones = {}
     DZ.folder = Instance.new("Folder"); DZ.folder.Name = "FlexDiamondZoneVisuals"; DZ.folder.Parent = Workspace
-    local lastFire = {}
+
+    -- Hook sounds for all current killers
+    if KillersFolder then
+        for _, k in ipairs(KillersFolder:GetChildren()) do
+            if k:IsA("Model") then pcall(DZ_HookKillerSounds, k) end
+        end
+        -- Hook sounds for killers that join later
+        local killerAddedConn = KillersFolder.ChildAdded:Connect(function(k)
+            if k:IsA("Model") and DZ.running then pcall(DZ_HookKillerSounds, k) end
+        end)
+        table.insert(DZ.connections, killerAddedConn)
+    end
+
+    -- Heartbeat only updates visuals now — no block firing here
     local function step()
         if not DZ.running or DZ_IsPlayerKiller() then return end
         local kf = KillersFolder; if not kf then return end
@@ -1256,25 +1333,17 @@ local function DZ_Start()
                 if not z or not z.model or not z.model.Parent then
                     if z and z.model then pcall(function() z.model:Destroy() end) end
                     z = DZ_BuildZone(k); DZ.killerZones[k] = z
+                    -- Ensure sound hooks exist for newly tracked killers
+                    if not DZ_SoundConns[k] then pcall(DZ_HookKillerSounds, k) end
                 end
                 DZ_UpdateZone(z, kr, mr)
-                -- fire block when player enters zone
-                if State.DiamondZoneAB then
-                    if DZ_IsInZone(k) then
-                        local now = os.clock()
-                        if not lastFire[k] or now - lastFire[k] > 0.1 then
-                            lastFire[k] = now
-                            pcall(DoBlock, kr)
-                        end
-                    end
-                end
             end
         end
         -- cull killers that left workspace
         for k, z in pairs(DZ.killerZones) do
             if not k.Parent or not k:IsDescendantOf(Workspace) then
                 if z.model then pcall(function() z.model:Destroy() end) end
-                DZ.killerZones[k] = nil; lastFire[k] = nil
+                DZ.killerZones[k] = nil
             end
         end
     end
@@ -1289,6 +1358,7 @@ local function DZ_Stop()
     for _, z in pairs(DZ.killerZones) do if z.model then pcall(function() z.model:Destroy() end) end end
     DZ.killerZones = {}
     if DZ.folder then pcall(function() DZ.folder:Destroy() end); DZ.folder = nil end
+    DZ_UnhookAllSounds()
 end
 
 function UpdateDiamondZoneVisibility()
@@ -4672,32 +4742,9 @@ function G1337.Step()
     G1337.updateESP()
     G1337.UpdatePunchESP()
     if not G1337.killersFolder then return end
-    -- Diamond Zone integration: fire block via G1337.remote only when inside diamond range
-    if G1337.settings.g1337DiamondZone and G1337.remote then
-        local c  = LocalPlayer.Character
-        local mr = c and c:FindFirstChild("HumanoidRootPart")
-        if mr then
-            for _, killer in ipairs(G1337.killersFolder:GetChildren()) do
-                if killer:IsA("Model") then
-                    local kr = killer:FindFirstChild("HumanoidRootPart")
-                    if kr then
-                        -- Use shared DZ_IsInDiamond (diamond range only, no circle)
-                        local inZone = DZ_IsInDiamond(mr.Position, kr.CFrame, kr.Position)
-                        if inZone and G1337.canUseBlock() then
-                            local now = os.clock()
-                            G1337._dzLastFire = G1337._dzLastFire or {}
-                            if not G1337._dzLastFire[killer] or now - G1337._dzLastFire[killer] > 0.1 then
-                                G1337._dzLastFire[killer] = now
-                                pcall(function()
-                                    G1337.remote:FireServer("UseActorAbility", {"Block"})
-                                end)
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
+    -- Diamond Zone block is now handled by DZ_HookKillerSounds (sound-event-driven).
+    -- No continuous polling here — block only fires when a killer M1 attack sound plays
+    -- and the player is inside the diamond zone.
     if not (G1337.settings.autoblock or G1337.settings.hd) then return end
     if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
