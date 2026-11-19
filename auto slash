@@ -1170,8 +1170,8 @@ local function DZ_IsInZone(k)
     local c  = LocalPlayer.Character
     local mr = c and c:FindFirstChild("HumanoidRootPart")
     if not kr or not mr then return false end
+    -- Only fire block inside the diamond range (custom range). Circle is visual only.
     return DZ_IsInDiamond(mr.Position, kr.CFrame, kr.Position)
-        or DZ_IsInCircle(mr.Position, kr.Position)
 end
 
 local function DZ_BuildZone(k)
@@ -1212,8 +1212,9 @@ local function DZ_UpdateZone(z, kr, mr)
     local wC  = dCF:PointToWorldSpace(Vector3.new(-W/2,  0, -(off + L/2)))
     local wD  = dCF:PointToWorldSpace(Vector3.new( W/2,  0, -(off + L/2)))
     local specs = { {wA, wC}, {wA, wD}, {wB, wC}, {wB, wD} }
-    local showDiamond = State.DZ_ShowDiamond and State.DiamondZoneAB
-    local showCircle  = State.DZ_ShowCircle  and State.DiamondZoneAB
+    local eitherZoneOn = State.DiamondZoneAB or (G1337 and G1337.settings and G1337.settings.g1337DiamondZone)
+    local showDiamond = State.DZ_ShowDiamond and eitherZoneOn
+    local showCircle  = State.DZ_ShowCircle  and eitherZoneOn
     for i, sp in ipairs(specs) do
         local p1, p2 = sp[1], sp[2]
         local mid = (p1 + p2) / 2; local diff = p2 - p1; local len = diff.Magnitude
@@ -1291,9 +1292,11 @@ local function DZ_Stop()
 end
 
 function UpdateDiamondZoneVisibility()
+    -- Start the engine whenever either diamond zone feature is enabled, or visuals are requested
     local need = State.DiamondZoneAB
-        or (State.DZ_ShowDiamond and State.DiamondZoneAB)
-        or (State.DZ_ShowCircle  and State.DiamondZoneAB)
+        or (G1337 and G1337.settings and G1337.settings.g1337DiamondZone)
+        or State.DZ_ShowDiamond
+        or State.DZ_ShowCircle
     if need and not DZ.running then DZ_Start()
     elseif not need and DZ.running then DZ_Stop() end
 end
@@ -4364,30 +4367,8 @@ end)
 
 -- g1337 auto block
 
--- G1337 Diamond Zone geometry helpers (read same State.DZ_* values as DZ engine)
-local _DZ_G1337_PLAYER_R = 1.5
-local function DZ_IsInDiamond_G1337(myPos, kCF, kPos)
-    local fwd = kCF.LookVector; local rgt = kCF.RightVector
-    local ff  = Vector3.new(fwd.X, 0, fwd.Z); local rr = Vector3.new(rgt.X, 0, rgt.Z)
-    if ff.Magnitude < 0.01 or rr.Magnitude < 0.01 then return false end
-    ff = ff.Unit; rr = rr.Unit
-    local tp  = Vector3.new(myPos.X - kPos.X, 0, myPos.Z - kPos.Z)
-    local dF  = tp:Dot(ff); local dR = tp:Dot(rr)
-    local L   = State.DZ_DiamondLength or 8
-    local W   = State.DZ_DiamondWidth  or 4
-    local off = State.DZ_DiamondOffset or 3
-    local cd  = off + L / 2
-    local d   = dF - cd
-    local hw  = W / 2 + _DZ_G1337_PLAYER_R; local hl = L / 2 + _DZ_G1337_PLAYER_R
-    if math.abs(myPos.Y - kPos.Y) > 10 + _DZ_G1337_PLAYER_R then return false end
-    return math.abs(dR) / hw + math.abs(d) / hl <= 1
-end
-local function DZ_IsInCircle_G1337(myPos, kPos)
-    local dx = myPos.X - kPos.X; local dz = myPos.Z - kPos.Z
-    local r  = (State.DZ_CircleRadius or 5) + _DZ_G1337_PLAYER_R
-    if math.abs(myPos.Y - kPos.Y) > 10 + _DZ_G1337_PLAYER_R then return false end
-    return dx * dx + dz * dz <= r * r
-end
+-- G1337 Diamond Zone uses the shared DZ engine geometry (DZ_IsInDiamond defined above).
+-- Duplicate helpers removed — both zones now share the same custom range settings.
 
 local G1337 = {}
 G1337.killersFolder = workspace:FindFirstChild("Players") and workspace.Players:FindFirstChild("Killers")
@@ -4691,8 +4672,8 @@ function G1337.Step()
     G1337.updateESP()
     G1337.UpdatePunchESP()
     if not G1337.killersFolder then return end
-    -- Diamond Zone integration: fire block via G1337.remote when inside DZ geometry
-    if G1337.settings.g1337DiamondZone and G1337.remote and G1337.canUseBlock() then
+    -- Diamond Zone integration: fire block via G1337.remote only when inside diamond range
+    if G1337.settings.g1337DiamondZone and G1337.remote then
         local c  = LocalPlayer.Character
         local mr = c and c:FindFirstChild("HumanoidRootPart")
         if mr then
@@ -4700,9 +4681,9 @@ function G1337.Step()
                 if killer:IsA("Model") then
                     local kr = killer:FindFirstChild("HumanoidRootPart")
                     if kr then
-                        local inZone = DZ_IsInDiamond_G1337(mr.Position, kr.CFrame, kr.Position)
-                                    or DZ_IsInCircle_G1337(mr.Position, kr.Position)
-                        if inZone then
+                        -- Use shared DZ_IsInDiamond (diamond range only, no circle)
+                        local inZone = DZ_IsInDiamond(mr.Position, kr.CFrame, kr.Position)
+                        if inZone and G1337.canUseBlock() then
                             local now = os.clock()
                             G1337._dzLastFire = G1337._dzLastFire or {}
                             if not G1337._dzLastFire[killer] or now - G1337._dzLastFire[killer] > 0.1 then
@@ -5172,22 +5153,12 @@ AddToggle(TabAutoBlock, "G1337_AutoBlock", "Autoblock", false, function(v) G1337
 AddSection(TabAutoBlock, "Diamond Zone (Alt Block)")
 AddToggle(TabAutoBlock, "G1337_DiamondZoneAB", "Diamond Zone Auto Block", false, function(v)
     G1337.settings.g1337DiamondZone = v
-    -- start/stop the DZ visual engine so the zone renders when this is on
-    State.DiamondZoneAB = v
+    -- Do NOT touch State.DiamondZoneAB — the two zones are independent.
+    -- Just start/stop the visual engine based on combined need.
     pcall(UpdateDiamondZoneVisibility)
 end)
-AddToggle(TabAutoBlock, "G1337_DZ_ShowDiamond", "Show Diamond Zone", false, function(v)
-    State.DZ_ShowDiamond = v
-    pcall(UpdateDiamondZoneVisibility)
-end)
-AddToggle(TabAutoBlock, "G1337_DZ_ShowCircle", "Show Circle Zone", false, function(v)
-    State.DZ_ShowCircle = v
-    pcall(UpdateDiamondZoneVisibility)
-end)
-AddSlider(TabAutoBlock, "G1337_DZ_DiamondLength", "Diamond Length",  1,  20, 8,   0.5, function(v) State.DZ_DiamondLength = v end)
-AddSlider(TabAutoBlock, "G1337_DZ_DiamondWidth",  "Diamond Width",   1,  15, 4,   0.5, function(v) State.DZ_DiamondWidth  = v end)
-AddSlider(TabAutoBlock, "G1337_DZ_DiamondOffset", "Diamond Offset",  0,  10, 3,   0.5, function(v) State.DZ_DiamondOffset = v end)
-AddSlider(TabAutoBlock, "G1337_DZ_CircleRadius",  "Circle Radius",   1,  20, 5,   0.5, function(v) State.DZ_CircleRadius  = v end)
+-- Note: visuals and range sliders are shared with the Original Diamond Zone section above.
+-- No duplicate sliders here — both zones use the same DZ_DiamondLength/Width/Offset/CircleRadius.
 AddToggle(TabAutoBlock, "G1337_OnlyLooking", "Only When Looking", true, function(v) G1337.settings.onlyLooking = v end)
 AddToggle(TabAutoBlock, "G1337_WallCheck", "Wall Check", true, function(v) G1337.settings.wallCheck = v end)
 AddSlider(TabAutoBlock, "G1337_ReactTime", "React Time (s)", 0.001, 0.5, 0.001, 0.001, function(v) G1337.settings.reactTime = v end)
@@ -5389,6 +5360,232 @@ AddSlider(TabSurvivor, "JD_AxeLockDur", "Lock Duration (s)", 0.5, 3, 1.7, 0.1, f
 
 AddSection(TabSurvivor, "Jane Doe — Control")
 AddButton(TabSurvivor, "Unload Jane Doe", function() Feature.JD_Unload() end)
+
+-- ============================================================
+-- JOHN DOE SPIKE AIMBOT
+-- ============================================================
+local JDSpikeAimbot = {}
+do
+    local _Settings = {
+        Enabled = false,
+        VelocitySmoothFactor = 0.15,
+        AimSmoothnessMoving = 0.05,
+        AimSmoothnessStop = 0.8,
+        CorruptLeadTime = 0.5,
+        WindupTime = 2.0,
+    }
+
+    local _State = {
+        HooksInstalled = false,
+        CurrentTarget = nil,
+        AimEndTime = 0,
+        LastTriggerTime = 0,
+        VelocityTable = {},
+        AimRenderConnection = nil,
+        AimHeartbeatConnection = nil,
+        AnimConnection = nil,
+        CharAddedConnection = nil,
+        CorruptAnimIds = {},
+    }
+
+    local function _GetSurvivorsFolder()
+        local pf = workspace:FindFirstChild("Players")
+        return pf and pf:FindFirstChild("Survivors")
+    end
+
+    local function _IsMovingAnalog()
+        local char = LocalPlayer.Character
+        if not char then return false end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        return hum and hum.MoveDirection.Magnitude > 0.1 or false
+    end
+
+    local function _UpdateVelocities(dt)
+        local survivors = _GetSurvivorsFolder()
+        if not survivors then return end
+        local active = {}
+        for _, child in ipairs(survivors:GetChildren()) do
+            local hrp = child:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                active[child] = true
+                local vt = _State.VelocityTable
+                local cp = hrp.Position
+                if not vt[child] or vt[child].Root ~= hrp then
+                    vt[child] = { Root = hrp, LastPos = cp, SmoothedVel = Vector3.zero }
+                else
+                    local d = vt[child]
+                    local rv = (cp - d.LastPos) / math.max(dt, 0.001)
+                    d.LastPos = cp
+                    d.SmoothedVel = d.SmoothedVel:Lerp(rv, _Settings.VelocitySmoothFactor)
+                end
+            end
+        end
+        for model in pairs(_State.VelocityTable) do
+            if not active[model] then _State.VelocityTable[model] = nil end
+        end
+    end
+
+    local function _GetPredicted(target)
+        local hrp = target and target:FindFirstChild("HumanoidRootPart")
+        if not hrp then return Vector3.zero end
+        local data = _State.VelocityTable[target]
+        local sv = data and data.SmoothedVel or hrp.AssemblyLinearVelocity
+        if sv.Magnitude > 120 then sv = Vector3.zero end
+        local flat = Vector3.new(sv.X, 0, sv.Z)
+        return hrp.Position + flat * _Settings.CorruptLeadTime
+    end
+
+    local function _StopAiming()
+        if _State.AimRenderConnection then _State.AimRenderConnection:Disconnect(); _State.AimRenderConnection = nil end
+        if _State.AimHeartbeatConnection then _State.AimHeartbeatConnection:Disconnect(); _State.AimHeartbeatConnection = nil end
+        _State.CurrentTarget = nil
+    end
+
+    local function _FindBest()
+        local survivors = _GetSurvivorsFolder()
+        if not survivors then return nil end
+        local best, bestDist = nil, math.huge
+        local char = LocalPlayer.Character
+        local myHrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not myHrp then return nil end
+        for _, s in ipairs(survivors:GetChildren()) do
+            local sh = s:FindFirstChild("HumanoidRootPart")
+            local hum = s:FindFirstChildOfClass("Humanoid")
+            if sh and hum and hum.Health > 0 then
+                local d = (sh.Position - myHrp.Position).Magnitude
+                if d < bestDist then bestDist = d; best = s end
+            end
+        end
+        return best
+    end
+
+    local function _AimStep()
+        if not _Settings.Enabled or os.clock() > _State.AimEndTime then _StopAiming(); return end
+        if not _State.CurrentTarget or not _State.CurrentTarget:FindFirstChild("HumanoidRootPart") then
+            _State.CurrentTarget = _FindBest()
+            if not _State.CurrentTarget then _StopAiming(); return end
+        end
+        local th = _State.CurrentTarget:FindFirstChildOfClass("Humanoid")
+        if th and th.Health <= 0 then
+            _State.CurrentTarget = _FindBest()
+            if not _State.CurrentTarget then _StopAiming(); return end
+        end
+        local tp = _GetPredicted(_State.CurrentTarget)
+        if tp == Vector3.zero then return end
+        local char = LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+        local sm = _IsMovingAnalog() and _Settings.AimSmoothnessMoving or _Settings.AimSmoothnessStop
+        local lp = Vector3.new(tp.X, hrp.Position.Y, tp.Z)
+        if (lp - hrp.Position).Magnitude > 0.01 then
+            hrp.CFrame = hrp.CFrame:Lerp(CFrame.lookAt(hrp.Position, lp), sm)
+        end
+    end
+
+    local function _Trigger()
+        if not _Settings.Enabled then return end
+        local now = os.clock()
+        if now - _State.LastTriggerTime < 0.5 then return end
+        local target = _FindBest()
+        if not target then return end
+        _StopAiming()
+        _State.LastTriggerTime = now
+        _State.CurrentTarget = target
+        _State.AimEndTime = now + _Settings.WindupTime + 1.5
+        _State.AimRenderConnection = RunService.RenderStepped:Connect(_AimStep)
+        _State.AimHeartbeatConnection = RunService.Heartbeat:Connect(_AimStep)
+    end
+
+    local function _CollectAnims()
+        table.clear(_State.CorruptAnimIds)
+        local function extract(mod)
+            local ok, cfg = pcall(require, mod)
+            if ok and type(cfg) == "table" and cfg.Animations then
+                for name, animId in pairs(cfg.Animations) do
+                    if type(animId) == "string" and string.find(string.lower(name), "corrupt") then
+                        table.insert(_State.CorruptAnimIds, animId)
+                    elseif type(animId) == "table" then
+                        for _, sub in pairs(animId) do
+                            if type(sub) == "string" and string.find(string.lower(name), "corrupt") then
+                                table.insert(_State.CorruptAnimIds, sub)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        pcall(function()
+            local jd = ReplicatedStorage.Assets.Killers:FindFirstChild("JohnDoe")
+            if jd and jd:FindFirstChild("Config") then extract(jd.Config) end
+            local skins = ReplicatedStorage.Assets:FindFirstChild("Skins")
+                and ReplicatedStorage.Assets.Skins:FindFirstChild("Killers")
+                and ReplicatedStorage.Assets.Skins.Killers:FindFirstChild("JohnDoe")
+            if skins then
+                for _, skin in ipairs(skins:GetChildren()) do
+                    if skin:FindFirstChild("Config") then extract(skin.Config) end
+                end
+            end
+        end)
+    end
+
+    local function _HookCharAnims(char)
+        if _State.AnimConnection then _State.AnimConnection:Disconnect(); _State.AnimConnection = nil end
+        local hum = char and char:WaitForChild("Humanoid", 5)
+        if not hum then return end
+        local animator = hum:FindFirstChildOfClass("Animator") or hum
+        _State.AnimConnection = animator.AnimationPlayed:Connect(function(track)
+            local anim = track.Animation
+            if anim and table.find(_State.CorruptAnimIds, anim.AnimationId) then
+                _Trigger()
+            end
+        end)
+    end
+
+    local function _Install()
+        if _State.HooksInstalled then return end
+        _CollectAnims()
+        pcall(function()
+            local bm = require(ReplicatedStorage.Assets.Killers.JohnDoe.Behavior)
+            if bm and bm.Abilities and bm.Abilities.CorruptEnergy then
+                local at = bm.Abilities.CorruptEnergy
+                local orig = at.Callback
+                if type(orig) == "function" then
+                    at.Callback = function(...)
+                        task.spawn(_Trigger)
+                        return orig(...)
+                    end
+                end
+            end
+        end)
+        if LocalPlayer.Character then task.spawn(_HookCharAnims, LocalPlayer.Character) end
+        _State.CharAddedConnection = LocalPlayer.CharacterAdded:Connect(function(newChar)
+            _StopAiming()
+            _CollectAnims()
+            _HookCharAnims(newChar)
+        end)
+        _State.HooksInstalled = true
+    end
+
+    RunService.Heartbeat:Connect(function(dt)
+        if _Settings.Enabled then _UpdateVelocities(dt) end
+    end)
+
+    -- Public interface for the UI toggle
+    function JDSpikeAimbot.SetEnabled(v)
+        _Settings.Enabled = v
+        if v then
+            _Install()
+        else
+            _StopAiming()
+        end
+    end
+end
+-- ============================================================
+
+AddSection(TabKiller, "John Doe")
+AddToggle(TabKiller, "JDSpikeAimbot", "John Doe Spike Aimbot", false, function(v)
+    JDSpikeAimbot.SetEnabled(v)
+end)
 
 AddSection(TabKiller, "Nova Silent Aim")
 SA.AddUI(TabKiller, SA.Nova, "Nova", "Nova")
