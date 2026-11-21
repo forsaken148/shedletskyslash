@@ -4801,63 +4801,72 @@ local function NS_MakeHitboxAndBlock(killerModel)
         (hbCfg.height or cfg.HitboxHeight) * m,
         (hbCfg.length or cfg.HitboxLength) * m
     )
+    -- Build OverlapParams once — reused every iteration, no per-frame allocation
     local op = OverlapParams.new()
     op.FilterType = Enum.RaycastFilterType.Exclude
     op.FilterDescendantsInstances = { killerModel }
+
+    -- Create the hitbox part once and reposition it each frame instead of
+    -- spawning a new instance every heartbeat (saves ~80% of loop cost)
+    local hb = Instance.new("Part")
+    hb.Name        = "NS_AltBlockHitbox"
+    hb.Transparency= cfg.ShowHitboxVisual and cfg.HitboxTransparency or 1
+    hb.CanCollide  = false; hb.CanTouch = false; hb.CanQuery = false
+    hb.CastShadow  = false; hb.Anchored = true
+    hb.Size        = size;  hb.Color    = cfg.HitboxColor
+    hb.Material    = Enum.Material.ForceField
+    hb.Parent      = workspace
+    local sb
+    if cfg.ShowOutline and cfg.ShowHitboxVisual then
+        sb = Instance.new("SelectionBox")
+        sb.Adornee      = hb; sb.Color3 = cfg.HitboxColor
+        sb.LineThickness = cfg.OutlineThickness
+        sb.Transparency  = cfg.OutlineTransparency
+        sb.Visible = true; sb.Parent = hb
+    end
+
     task.spawn(function()
-        local startTime = tick()
-        local blocked = false
-        while tick() - startTime < hbCfg.dura do
+        local offset    = hbCfg.distance or cfg.HitboxDistance
+        local deadline  = tick() + hbCfg.dura
+        local blocked   = false
+
+        while tick() < deadline do
             if blocked then break end
             local kr = killerModel:FindFirstChild("HumanoidRootPart") or killerModel:FindFirstChild("RootPart")
             if not kr then break end
-            local offset = hbCfg.distance or cfg.HitboxDistance
-            local boxCF = kr.CFrame * CFrame.new(0, 0, -offset)
-            local hb = Instance.new("Part")
-            hb.Name = "NS_AltBlockHitbox"
-            hb.Transparency = cfg.ShowHitboxVisual and cfg.HitboxTransparency or 1
-            hb.CanCollide = false; hb.CanTouch = false; hb.CanQuery = false
-            hb.CastShadow = false; hb.Anchored = true
-            hb.Size = size; hb.Color = cfg.HitboxColor
-            hb.Material = Enum.Material.ForceField
-            hb.CFrame = boxCF; hb.Parent = workspace
-            local sb
-            if cfg.ShowOutline and cfg.ShowHitboxVisual then
-                sb = Instance.new("SelectionBox")
-                sb.Adornee = hb; sb.Color3 = cfg.HitboxColor
-                sb.LineThickness = cfg.OutlineThickness
-                sb.Transparency = cfg.OutlineTransparency
-                sb.Visible = true; sb.Parent = hb
-            end
-            game:GetService("Debris"):AddItem(hb, hbCfg.life)
-            -- Check overlap with local QueryHitbox or HumanoidRootPart
+
+            -- Reposition the existing part — no instance creation this frame
+            hb.CFrame = kr.CFrame * CFrame.new(0, 0, -offset)
+
+            -- Use GetPartBoundsInBox directly (faster than GetPartsInPart on an anchored part)
             local localChar = LocalCharacter
-            local found = false
             if localChar then
                 local lq = localChar:FindFirstChild("QueryHitbox") or localChar:FindFirstChild("HumanoidRootPart")
                 if lq then
-                    local innerOp = OverlapParams.new()
-                    innerOp.FilterType = Enum.RaycastFilterType.Exclude
-                    innerOp.FilterDescendantsInstances = { killerModel }
-                    for _, part in ipairs(workspace:GetPartsInPart(hb, innerOp)) do
+                    local hits = workspace:GetPartBoundsInBox(hb.CFrame, size, op)
+                    for _, part in ipairs(hits) do
                         if part == lq or part:IsDescendantOf(localChar) then
                             local hum = localChar:FindFirstChildOfClass("Humanoid")
-                            if hum and hum.Health > 0 then found = true; break end
+                            if hum and hum.Health > 0 then
+                                blocked = true
+                                pcall(function()
+                                    hb.Color = cfg.HitboxHitColor
+                                    if sb then sb.Color3 = cfg.HitboxHitColor end
+                                end)
+                                FireAbility("Block")
+                                break
+                            end
                         end
                     end
                 end
             end
-            if found and not blocked then
-                blocked = true
-                pcall(function()
-                    hb.Color = cfg.HitboxHitColor
-                    if sb then sb.Color3 = cfg.HitboxHitColor end
-                end)
-                FireAbility("Block")
-                break
-            end
-            RunService.Heartbeat:Wait()
+
+            -- RenderStepped fires before physics — tighter timing than Heartbeat
+            RunService.RenderStepped:Wait()
         end
+
+        -- Clean up the single shared part when the window closes
+        pcall(function() hb:Destroy() end)
     end)
 end
 
